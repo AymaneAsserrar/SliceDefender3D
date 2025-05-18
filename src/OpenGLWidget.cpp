@@ -311,14 +311,15 @@ void OpenGLWidget::timerEvent(QTimerEvent* /*event*/) {
 void OpenGLWidget::spawnProjectile() {
     // Select a random type for the projectile
     Projectile::Type type;
-    int typeRand = QRandomGenerator::global()->bounded(3); // 0, 1, or 2
-    
-    if (typeRand == 0) {
-        type = Projectile::Type::CUBE;
-    } else if (typeRand == 1) {
-        type = Projectile::Type::PRISM;
+    int typeRandom = QRandomGenerator::global()->bounded(4);
+    if (typeRandom == 0) {
+        type = Projectile::Type::BANANA;  // Was CUBE
+    } else if (typeRandom == 1) {
+        type = Projectile::Type::APPLE;  // Was PRISM
+    } else if (typeRandom == 2) {
+        type = Projectile::Type::ANANAS;  // Was CONE
     } else {
-        type = Projectile::Type::CONE;
+        type = Projectile::Type::APPLE;  // If there was SPHERE before, replace with APPLE or another fruit
     }
 
     // Start position - spawn from the zone at cylinder height

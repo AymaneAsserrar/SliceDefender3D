@@ -12,14 +12,13 @@
 // Forward declarations
 class QOpenGLShaderProgram;
 
-class Projectile : protected QOpenGLFunctions {
+class Projectile : public QOpenGLFunctions {
 public:
     // Projectile types
     enum class Type {
-        CUBE,
-        PRISM,
-        SPHERE,
-        CONE
+        BANANA,
+        APPLE,
+        ANANAS  // Pineapple
     };
 
     // Constructor
@@ -52,10 +51,9 @@ public:
 
 private:
     // Rendering helpers
-    void renderCube(QOpenGLShaderProgram* shaderProgram);
-    void renderPrism(QOpenGLShaderProgram* shaderProgram);
-    void renderSphere(QOpenGLShaderProgram* shaderProgram);
-    void renderCone(QOpenGLShaderProgram* shaderProgram);
+    void renderBanana(QOpenGLShaderProgram* shaderProgram);
+    void renderApple(QOpenGLShaderProgram* shaderProgram);
+    void renderAnanas(QOpenGLShaderProgram* shaderProgram);  // Add this line
 
     // Properties
     Type m_type;
@@ -72,6 +70,13 @@ private:
     GLuint m_ebo;
     bool m_initialized;
     bool m_isFragment = false;  // Flag to track if this is a fragment
+    
+    // Fragment-specific properties
+    int m_fragmentSide = 0;         // 1 for positive half, -1 for negative half
+    QVector3D m_sliceNormal;        // Normal vector of the slice plane
+    
+    // Helper for fragment rendering
+    void applyFragmentCutPlane(std::vector<GLfloat>& vertices, std::vector<GLuint>& indices);
     
     // Physics constants
     static constexpr float GRAVITY = 9.8f;
