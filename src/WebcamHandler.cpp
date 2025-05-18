@@ -5,7 +5,7 @@
 
 WebcamHandler::WebcamHandler(QObject *parent) : QObject(parent), running(false) {
     // Load the palm.xml Haar cascade file
-    if (!palmCascade.load("C:/Users/pc/Desktop/BDM project/BDM2/palm.xml")) {
+    if (!palmCascade.load("C:/Users/pc/slicedefender3d/palm.xml")) {
         qWarning() << "Failed to load palm.xml";
     }
 
