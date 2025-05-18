@@ -1,0 +1,83 @@
+#ifndef PROJECTILE_H
+#define PROJECTILE_H
+
+#include <QOpenGLFunctions>
+#include <QOpenGLExtraFunctions>
+#include <QVector3D>
+#include <QMatrix4x4>
+#include <QOpenGLShaderProgram>
+#include <QOpenGLTexture>
+#include <vector>
+
+// Forward declarations
+class QOpenGLShaderProgram;
+
+class Projectile : protected QOpenGLFunctions {
+public:
+    // Projectile types
+    enum class Type {
+        CUBE,
+        PRISM,
+        SPHERE,
+        CONE
+    };
+
+    // Constructor
+    Projectile(Type type, const QVector3D& position, const QVector3D& velocity);
+    ~Projectile();
+
+    // Properties
+    QVector3D position() const { return m_position; }
+    QVector3D velocity() const { return m_velocity; }
+    bool isActive() const { return m_active; }
+    Type type() const { return m_type; }
+    float rotationAngle() const { return m_rotationAngle; }
+
+    // Main functionality
+    void update(float deltaTime);
+    void render(QOpenGLShaderProgram* shaderProgram, const QMatrix4x4& projection, const QMatrix4x4& view);
+    bool checkCollisionWithCylinder(float radius, float height, const QVector3D& cylinderPosition);
+    std::vector<Projectile> slice();
+
+    // Initialize OpenGL resources
+    void initializeGL();
+
+    // Add method to check if this is a fragment
+    bool isFragment() const { return m_isFragment; }
+
+    void applyGravity(float deltaTime) {
+        // Apply gravity directly to the velocity vector
+        m_velocity.setY(m_velocity.y() - 2.5f * deltaTime); // Gravity constant
+    }
+
+private:
+    // Rendering helpers
+    void renderCube(QOpenGLShaderProgram* shaderProgram);
+    void renderPrism(QOpenGLShaderProgram* shaderProgram);
+    void renderSphere(QOpenGLShaderProgram* shaderProgram);
+    void renderCone(QOpenGLShaderProgram* shaderProgram);
+
+    // Properties
+    Type m_type;
+    QVector3D m_position;
+    QVector3D m_velocity;
+    float m_rotationAngle;
+    QVector3D m_rotationAxis;
+    bool m_active;
+    float m_scale;
+    
+    // Reorder these declarations to match initialization order
+    GLuint m_vao;
+    GLuint m_vbo;
+    GLuint m_ebo;
+    bool m_initialized;
+    bool m_isFragment = false;  // Flag to track if this is a fragment
+    
+    // Physics constants
+    static constexpr float GRAVITY = 9.8f;
+
+    // Collision helpers
+    bool checkPointInCylinder(const QVector3D& point, float radius, float height, const QVector3D& cylinderPosition);
+};
+
+#endif // PROJECTILE_H
