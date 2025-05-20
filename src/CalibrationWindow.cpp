@@ -68,14 +68,13 @@ bool CalibrationWindow::initializePalmDetection() {
     qDebug() << "Current app directory:" << appDir;
 
     // Add possible locations to search
-    possiblePaths << appDir + "/palm.xml"
-                  << appDir + "/haarcascade_hand.xml"
-                  << appDir + "/../palm.xml"
-                  << appDir + "/../haarcascade_hand.xml"
-                  //<< appDir + "/../../palm.xml"
-                  //<< appDir + "/../../haarcascade_hand.xml"
-                  << appDir + "C:/Users/benzh/Downloads/slicedefender3d/build/Desktop_Qt_6_6_3_MinGW_64_bit-Debug/debug/haarcascade_hand.xml"
-                  << appDir + "C:/Users/benzh/Downloads/slicedefender3d/build/Desktop_Qt_6_6_3_MinGW_64_bit-Debug/debug/palm.xml";
+    possiblePaths << appDir + "/palm.xml"                         // In build/exe directory
+                  << appDir + "/haarcascade_hand.xml"             // Fallback in build/exe dir
+                  << appDir + "/../palm.xml"                      // One level up
+                  << appDir + "/../haarcascade_hand.xml"          // Fallback one level up
+                  << "C:/Users/pc/Desktop/BDM project/BDM2/palm.xml"       // Absolute path to project root
+                  << "C:/Users/pc/Desktop/BDM project/BDM2/haarcascade_hand.xml"; // Fallback absolute path
+
 
     bool palmCascadeLoaded = false;
 
