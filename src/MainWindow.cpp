@@ -6,6 +6,7 @@
 #include <QCloseEvent>
 #include <QTimer>
 #include <QMessageBox>
+#include <QPushButton>
 
 MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new WebcamHandler()) {
     // Create UI elements
@@ -24,21 +25,46 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new
     cameraLabel = new QLabel("Camera Feed", this);
     cameraLabel->setAlignment(Qt::AlignCenter);
     cameraLabel->setStyleSheet("background-color: black;");
-    cameraLabel->setFixedSize(320, 240); // Fixed size for the webcam feed (red rectangle)
+    cameraLabel->setFixedSize(320, 240); // Fixed size for the webcam feed
 
     // Score and Time labels
     scoreLabel = new QLabel("Score: 0", this);
-    timeLabel = new QLabel("Time: 0", this);
+    timeLabel = new QLabel("Time: 0s", this);
     scoreLabel->setAlignment(Qt::AlignCenter);
     timeLabel->setAlignment(Qt::AlignCenter);
+
+    // Stylish font and colors for score and time labels
+    scoreLabel->setStyleSheet(
+        "QLabel {"
+        "   font-size: 20px;"
+        "   font-weight: bold;"
+        "   color: #2E7D32;"     // nice green
+        "   padding: 10px;"
+        "   border: 2px solid #81C784;"
+        "   border-radius: 12px;"
+        "   background-color: #E8F5E9;"  // light green background
+        "}"
+        );
+
+    timeLabel->setStyleSheet(
+        "QLabel {"
+        "   font-size: 18px;"
+        "   font-weight: semi-bold;"
+        "   color: #1565C0;"     // deep blue
+        "   padding: 8px;"
+        "   border: 2px solid #64B5F6;"
+        "   border-radius: 12px;"
+        "   background-color: #E3F2FD;"  // light blue background
+        "}"
+        );
 
     // Add widgets to the right layout
     rightLayout->addWidget(cameraLabel);
     rightLayout->addWidget(scoreLabel);
     rightLayout->addWidget(timeLabel);
-    rightLayout->addStretch(); // Add stretch to push labels to the top
+    rightLayout->addStretch(); // Push labels to the top
 
-    mainLayout->addLayout(rightLayout, 1); // Stretch factor 1 for the right layout
+    mainLayout->addLayout(rightLayout, 1); // Stretch factor 1 for right layout
 
     setCentralWidget(centralWidget);
 
@@ -59,33 +85,31 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new
     scoreLabel->setText("Score: 0");
     timeLabel->setText("Time: 0s");
 
-    // Start the game timer
-    gameTimer->start(1000); // 1-second updates
+    // Start the game timer (update every second)
+    gameTimer->start(1000);
 
     // Start the webcam
     webcamHandler->startCamera();
 }
 
 MainWindow::~MainWindow() {
-    // Stop the timer
+    // Stop timer
     gameTimer->stop();
 
-    // Ensure the webcam is stopped and delete the handler
+    // Ensure webcam is stopped and thread is quit
     webcamHandler->stopCamera();
-    webcamHandler->thread()->quit(); // Ensure the thread is stopped
-    webcamHandler->thread()->wait(); // Wait for the thread to finish
+    webcamHandler->thread()->quit();
+    webcamHandler->thread()->wait();
     delete webcamHandler;
-    delete openglWidget; // Explicitly delete OpenGLWidget if necessary
+    delete openglWidget;
 }
 
 void MainWindow::closeEvent(QCloseEvent *event) {
-    // Stop the webcam when the window is closed
     webcamHandler->stopCamera();
     QMainWindow::closeEvent(event);
 }
 
 void MainWindow::updateCameraView(const QImage &frame) {
-    // Convert QImage to QPixmap and display it in the cameraLabel
     QPixmap pixmap = QPixmap::fromImage(frame);
     cameraLabel->setPixmap(pixmap.scaled(cameraLabel->size(), Qt::KeepAspectRatio, Qt::SmoothTransformation));
 }
@@ -95,19 +119,14 @@ void MainWindow::onHandDetected(const QPoint &center) {
 
     QSize camSize = !cameraLabel->pixmap().isNull() ? cameraLabel->pixmap().size() : cameraLabel->size();
 
-    // Convert to normalized coordinates (0.0 to 1.0)
+
     float normX = float(center.x()) / float(camSize.width());
     float normY = float(center.y()) / float(camSize.height());
 
-    // Pass to OpenGLWidget for 3D positioning
     openglWidget->setHandPosition(normX, normY);
-
-    // Update score display (if score is available from OpenGLWidget)
-    // scoreLabel->setText(QString("Score: %1").arg(openglWidget->getScore()));
 }
 
 void MainWindow::incrementScore() {
-    // Increase score by 1 point for each original projectile
     score += 1;
     scoreLabel->setText(QString("Score: %1").arg(score));
 }
@@ -116,30 +135,62 @@ void MainWindow::updateGameTime() {
     elapsedTime++;
     timeLabel->setText(QString("Time: %1s").arg(elapsedTime));
 
-    // End game after 2 minutes (120 seconds)
     if (elapsedTime >= gameDuration) {
         endGame();
     }
 }
 
 void MainWindow::endGame() {
-    // Stop timer
     gameTimer->stop();
 
-    // Show game over message
-    QMessageBox::information(this, "Game Over",
-                          QString("Game Over!\nYour Score: %1\nTime: %2 seconds")
-                          .arg(score).arg(elapsedTime));
+    QString message = QString(
+                          "<div style='text-align: center;'>"
+                          "<h1 style='color: #E53935; font-weight: bold;'>Game Over!</h1>"
+                          "<p style='font-size: 18px; color: #3949AB;'>"
+                          "Your Score: <b>%1</b><br>"
+                          "Time Played: <b>%2 seconds</b>"
+                          "</p>"
+                          "</div>"
+                          ).arg(score).arg(elapsedTime);
 
-    // Reset for new game
+    QMessageBox msgBox(this);
+    msgBox.setWindowTitle("Game Over");
+    msgBox.setTextFormat(Qt::RichText);
+    msgBox.setText(message);
+    msgBox.setIcon(QMessageBox::Information);
+    msgBox.setStandardButtons(QMessageBox::Ok);
+    msgBox.setDefaultButton(QMessageBox::Ok);
+
+    QPushButton* okButton = qobject_cast<QPushButton*>(msgBox.button(QMessageBox::Ok));
+    if (okButton) {
+        okButton->setStyleSheet(
+            "QPushButton {"
+            "   background-color: #1976D2;"
+            "   color: white;"
+            "   font-size: 16px;"
+            "   font-weight: bold;"
+            "   padding: 10px 25px;"
+            "   border-radius: 15px;"
+            "   min-width: 100px;"
+            "}"
+            "QPushButton:hover {"
+            "   background-color: #1565C0;"
+            "}"
+            "QPushButton:pressed {"
+            "   background-color: #0D47A1;"
+            "}"
+            );
+    }
+
+    msgBox.exec();
+
+    // Reset game state and UI
     score = 0;
     elapsedTime = 0;
     scoreLabel->setText("Score: 0");
     timeLabel->setText("Time: 0s");
 
-    // Reset the OpenGL scene
     openglWidget->resetGame();
 
-    // Restart timer
     gameTimer->start(1000);
 }

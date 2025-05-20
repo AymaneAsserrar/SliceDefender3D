@@ -18,7 +18,8 @@ public:
     enum class Type {
         BANANA,
         APPLE,
-        ANANAS  // Pineapple
+        ANANAS,
+        FRAISE
     };
 
     // Constructor
@@ -53,7 +54,8 @@ private:
     // Rendering helpers
     void renderBanana(QOpenGLShaderProgram* shaderProgram);
     void renderApple(QOpenGLShaderProgram* shaderProgram);
-    void renderAnanas(QOpenGLShaderProgram* shaderProgram);  // Add this line
+    void renderAnanas(QOpenGLShaderProgram* shaderProgram);
+    void renderFraise(QOpenGLShaderProgram* shaderProgram);
 
     // Properties
     Type m_type;

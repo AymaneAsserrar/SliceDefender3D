@@ -72,11 +72,20 @@ void Projectile::initializeGL() {
 
     else if (m_type == Type::BANANA) {
         if (m_texture) delete m_texture;
-        m_texture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/banana2_texture.jpg").mirrored());
+        m_texture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/banana4_texture.jpg").mirrored());
         m_texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
         m_texture->setMagnificationFilter(QOpenGLTexture::Linear);
         m_texture->setWrapMode(QOpenGLTexture::Repeat);
         m_hasTexture= true;
+    }
+
+    else if (m_type == Type::FRAISE) {
+        if (m_texture) delete m_texture;
+        m_texture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/Fraise_texture.jpg").mirrored());
+        m_texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+        m_texture->setMagnificationFilter(QOpenGLTexture::Linear);
+        m_texture->setWrapMode(QOpenGLTexture::Repeat);
+        m_hasTexture = true;
     }
 
 
@@ -136,6 +145,13 @@ void Projectile::render(QOpenGLShaderProgram* shaderProgram, const QMatrix4x4& p
     case Type::ANANAS:
         color = m_isFragment ? QVector4D(0.98f, 0.93f, 0.7f, 1.0f) : QVector4D(0.9f, 0.7f, 0.1f, 1.0f);
         break;
+    case Type::FRAISE:
+        shaderProgram->setUniformValue("useTexture", true);
+        renderFraise(shaderProgram);
+        shaderProgram->setUniformValue("useTexture", false);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        break;
+
     }
     shaderProgram->setUniformValue("color", color);
 
@@ -166,6 +182,14 @@ void Projectile::render(QOpenGLShaderProgram* shaderProgram, const QMatrix4x4& p
         shaderProgram->setUniformValue("useTexture", false);
         renderAnanas(shaderProgram);
         break;
+
+    case Type::FRAISE:
+        shaderProgram->setUniformValue("useTexture", true);
+        renderFraise(shaderProgram);
+        shaderProgram->setUniformValue("useTexture", false);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        break;
+
     }
 }
 
@@ -403,8 +427,8 @@ void Projectile::applyFragmentCutPlane(std::vector<GLfloat>& vertices, std::vect
 // Update rendering methods to handle fragments
 void Projectile::renderBanana(QOpenGLShaderProgram* shaderProgram) {
     const int segments = 12;
-    const float baseRadius = 0.06f;
-    const float length = 0.4f;
+    const float baseRadius = 0.08f;
+    const float length = 0.7f;
 
     std::vector<GLfloat> vertices;
     std::vector<GLuint> indices;
@@ -521,9 +545,12 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
     const float radius = 0.45f;
     const float heightFactor = 1.1f;
 
-    std::vector<GLfloat> vertices;
-    std::vector<GLuint> indices;
+    std::vector<GLfloat> verticesBody;
+    std::vector<GLuint> indicesBody;
+    std::vector<GLfloat> verticesLeaves;
+    std::vector<GLuint> indicesLeaves;
 
+    // --- Génération corps pomme (sphère modifiée) ---
     for (int i = 0; i <= stacks; ++i) {
         float v = float(i) / float(stacks);
         float phi = M_PI * v;
@@ -555,47 +582,101 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
             float nz = sinPhi * sinTheta;
             float len = std::sqrt(nx * nx + ny * ny + nz * nz);
 
-            vertices.push_back(x);
-            vertices.push_back(y);
-            vertices.push_back(z);
-            vertices.push_back(nx / len);
-            vertices.push_back(ny / len);
-            vertices.push_back(nz / len);
-            vertices.push_back(u); // texture u
-            vertices.push_back(v); // texture v
+            verticesBody.push_back(x);
+            verticesBody.push_back(y);
+            verticesBody.push_back(z);
+            verticesBody.push_back(nx / len);
+            verticesBody.push_back(ny / len);
+            verticesBody.push_back(nz / len);
+            verticesBody.push_back(u);
+            verticesBody.push_back(v);
         }
     }
 
-    // Indices
+    // Indices corps pomme
     for (int i = 0; i < stacks; ++i) {
         for (int j = 0; j < slices; ++j) {
             int first = i * (slices + 1) + j;
             int second = first + slices + 1;
 
-            indices.push_back(first);
-            indices.push_back(second);
-            indices.push_back(first + 1);
+            indicesBody.push_back(first);
+            indicesBody.push_back(second);
+            indicesBody.push_back(first + 1);
 
-            indices.push_back(second);
-            indices.push_back(second + 1);
-            indices.push_back(first + 1);
+            indicesBody.push_back(second);
+            indicesBody.push_back(second + 1);
+            indicesBody.push_back(first + 1);
         }
     }
 
-    if (m_isFragment)
-        applyFragmentCutPlane(vertices, indices);
+    // --- Génération des 2 feuilles planes ---
+    // Position de la base des feuilles : légèrement au-dessus du sommet de la pomme
+    const float crownY = radius * heightFactor + 0.02f;
+    const float leafSize = 0.2f;
 
-    // Bind VAO
+    // Feuille 1 (plan simple, 2 triangles formant un rectangle)
+    // Sommets : 4 points (x,y,z), normales simples vers le haut (0,1,0)
+    verticesLeaves.insert(verticesLeaves.end(), {
+                                                    -leafSize, crownY, 0.0f,    0, 1, 0,   0.0f, 0.0f,  // bas-gauche
+                                                    leafSize, crownY, 0.0f,    0, 1, 0,   1.0f, 0.0f,  // bas-droite
+                                                    -leafSize, crownY + leafSize * 0.6f, 0.0f, 0, 1, 0,  0.0f, 1.0f,  // haut-gauche
+                                                    leafSize, crownY + leafSize * 0.6f, 0.0f, 0, 1, 0,  1.0f, 1.0f   // haut-droite
+                                                });
+    indicesLeaves.insert(indicesLeaves.end(), {
+                                                  0, 1, 2,
+                                                  1, 3, 2
+                                              });
+
+    // Feuille 2 (même forme, pivotée de 45° autour de Y)
+    // On applique une rotation manuelle sur X,Z
+    auto rotateY45 = [](float x, float z) -> std::pair<float,float> {
+        float angle = M_PI / 4.0f; // 45°
+        float cosA = std::cos(angle);
+        float sinA = std::sin(angle);
+        return { x * cosA - z * sinA, x * sinA + z * cosA };
+    };
+
+    size_t baseIndex = verticesLeaves.size() / 8; // base des sommets suivants
+
+    // sommets feuille 2 avant rotation (x,z)
+    float xBL = -leafSize, zBL = 0.0f;
+    float xBR = leafSize,  zBR = 0.0f;
+    float xTL = -leafSize, zTL = 0.0f;
+    float xTR = leafSize,  zTR = 0.0f;
+    float yBase = crownY;
+    float yTop = crownY + leafSize * 0.6f;
+
+    auto [xBLr, zBLr] = rotateY45(xBL, zBL);
+    auto [xBRr, zBRr] = rotateY45(xBR, zBR);
+    auto [xTLr, zTLr] = rotateY45(xTL, zTL);
+    auto [xTRr, zTRr] = rotateY45(xTR, zTR);
+
+    verticesLeaves.insert(verticesLeaves.end(), {
+                                                    xBLr, yBase, zBLr,    0,1,0,   0.0f, 0.0f,
+                                                    xBRr, yBase, zBRr,    0,1,0,   1.0f, 0.0f,
+                                                    xTLr, yTop,  zTLr,    0,1,0,   0.0f, 1.0f,
+                                                    xTRr, yTop,  zTRr,    0,1,0,   1.0f, 1.0f,
+                                                });
+
+    indicesLeaves.insert(indicesLeaves.end(), {
+                                                  (GLuint)(baseIndex + 0), (GLuint)(baseIndex + 1), (GLuint)(baseIndex + 2),
+                                                  (GLuint)(baseIndex + 1), (GLuint)(baseIndex + 3), (GLuint)(baseIndex + 2)
+                                              });
+
+    // --- Upload / Draw ---
+
+    if (m_isFragment)
+        applyFragmentCutPlane(verticesBody, indicesBody);
+
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(m_vao);
 
-    // Upload les buffers à chaque frame (ok pour projet simple)
+    // Corps pomme (texture)
     this->glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
-    this->glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
+    this->glBufferData(GL_ARRAY_BUFFER, verticesBody.size() * sizeof(GLfloat), verticesBody.data(), GL_STATIC_DRAW);
 
     this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
-    this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
+    this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesBody.size() * sizeof(GLuint), indicesBody.data(), GL_STATIC_DRAW);
 
-    // Attribs
     this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     this->glEnableVertexAttribArray(0);
 
@@ -605,7 +686,6 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
     this->glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     this->glEnableVertexAttribArray(2);
 
-    // Active texture
     if (m_hasTexture && m_texture) {
         shaderProgram->setUniformValue("useTexture", true);
         m_texture->bind(0);
@@ -614,22 +694,27 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
         shaderProgram->setUniformValue("useTexture", false);
     }
 
-    // Draw
-    this->glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-
-    // Cleanup
-    QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
+    this->glDrawElements(GL_TRIANGLES, indicesBody.size(), GL_UNSIGNED_INT, 0);
 
     if (m_hasTexture && m_texture) {
-        m_texture->release(); // Important pour éviter la pollution
-        glBindTexture(GL_TEXTURE_2D, 0); // Sécurité : force à désactiver
+        m_texture->release();
+        glBindTexture(GL_TEXTURE_2D, 0);
     }
+
+    // Feuilles (couleur verte, sans texture)
+    this->glBufferData(GL_ARRAY_BUFFER, verticesLeaves.size() * sizeof(GLfloat), verticesLeaves.data(), GL_STATIC_DRAW);
+    this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesLeaves.size() * sizeof(GLuint), indicesLeaves.data(), GL_STATIC_DRAW);
+
+    shaderProgram->setUniformValue("useTexture", false);
+    shaderProgram->setUniformValue("color", QVector4D(0.0f, 0.4f, 0.0f, 1.0f)); // vert foncé
+
+    this->glDrawElements(GL_TRIANGLES, indicesLeaves.size(), GL_UNSIGNED_INT, 0);
+
+    QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
 }
 
 
-
-void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
-    // More detailed pineapple with texture pattern and spiky crown
+void Projectile::renderAnanas(QOpenGLShaderProgram* shaderProgram) {
     const int slices = 32;
     const int stacks = 16;
     const float bodyHeight = 0.8f;
@@ -639,19 +724,18 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
     std::vector<GLfloat> vertices;
     std::vector<GLuint> indices;
 
-    // Generate pineapple body with diamond pattern texture
+    // Corps de l'ananas
     for (int i = 0; i <= stacks; ++i) {
         float v = float(i) / float(stacks);
-        float y = -bodyHeight/2 + v * bodyHeight;
+        float y = -bodyHeight / 2 + v * bodyHeight;
 
-        // Vary radius to create slight bulge in middle
         float radiusFactor = 1.0f;
         if (v < 0.2f) {
-            radiusFactor = 0.7f + 0.3f * (v / 0.2f);  // Taper at bottom
+            radiusFactor = 0.7f + 0.3f * (v / 0.2f);
         } else if (v > 0.8f) {
-            radiusFactor = 0.9f - 0.2f * (v - 0.8f) / 0.2f;  // Taper at top
+            radiusFactor = 0.9f - 0.2f * (v - 0.8f) / 0.2f;
         } else {
-            radiusFactor = 1.0f + 0.05f * std::sin((v - 0.2f) / 0.6f * M_PI);  // Slight bulge
+            radiusFactor = 1.0f + 0.05f * std::sin((v - 0.2f) / 0.6f * M_PI);
         }
 
         float currentRadius = bodyRadius * radiusFactor;
@@ -662,96 +746,85 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
             float cosTheta = std::cos(theta);
             float sinTheta = std::sin(theta);
 
-            // Create diamond pattern effect
             float bumpDepth = 0.03f * std::sin(v * 40.0f) * std::sin(u * 40.0f);
             float bumpRadius = currentRadius + bumpDepth;
 
-            // Position
             float x = bumpRadius * cosTheta;
             float z = bumpRadius * sinTheta;
 
-            // Normal calculation for bumpy surface
             float nx = cosTheta;
-            float ny = bumpDepth * 4.0f;  // Exaggerate normal for bump effect
+            float ny = bumpDepth * 4.0f;
             float nz = sinTheta;
 
-            // Normalize the normal
-            float len = std::sqrt(nx*nx + ny*ny + nz*nz);
+            float len = std::sqrt(nx * nx + ny * ny + nz * nz);
 
             vertices.push_back(x);
             vertices.push_back(y);
             vertices.push_back(z);
-            vertices.push_back(nx/len);
-            vertices.push_back(ny/len);
-            vertices.push_back(nz/len);
+
+            vertices.push_back(nx / len);
+            vertices.push_back(ny / len);
+            vertices.push_back(nz / len);
         }
     }
 
-    // Generate crown as a set of spiky leaves
-    const int leaves = 16;    // Number of leaves
-    const int leafDetail = 4; // Detail level of each leaf
+    // Couronne de feuilles (top)
+    const int leaves = 16;
+    const int leafDetail = 4;
 
-    // First add center point for crown
-    vertices.push_back(0.0f);                // x
-    vertices.push_back(bodyHeight/2);        // y
-    vertices.push_back(0.0f);                // z
-    vertices.push_back(0.0f);                // nx
-    vertices.push_back(1.0f);                // ny
-    vertices.push_back(0.0f);                // nz
+    // Point central de la couronne
+    vertices.push_back(0.0f);
+    vertices.push_back(bodyHeight / 2);
+    vertices.push_back(0.0f);
+    vertices.push_back(0.0f);
+    vertices.push_back(1.0f);
+    vertices.push_back(0.0f);
 
-    // Add leaves radiating from center
     for (int i = 0; i < leaves; ++i) {
         float leafAngle = 2.0f * M_PI * float(i) / float(leaves);
-        float leafDirection = leafAngle + M_PI_4 * 0.5f * (float(i % 3) - 1.0f);  // Random variation
+        float leafDirection = leafAngle + M_PI_4 * 0.5f * (float(i % 3) - 1.0f);
 
-        // Base of leaf
         float baseX = 0.15f * std::cos(leafAngle);
         float baseZ = 0.15f * std::sin(leafAngle);
-        float baseY = bodyHeight/2;
+        float baseY = bodyHeight / 2;
 
-        // Tip of leaf - varies in height and curvature
-        float heightVar = 0.7f + 0.6f * float(i % 3) / 2.0f;  // Vary height
+        float heightVar = 0.7f + 0.6f * float(i % 3) / 2.0f;
         float tipX = baseX * 0.5f + 0.1f * std::cos(leafDirection);
         float tipZ = baseZ * 0.5f + 0.1f * std::sin(leafDirection);
         float tipY = baseY + crownHeight * heightVar;
 
-        // Create the leaf as a tapered shape
         for (int j = 0; j <= leafDetail; ++j) {
             float t = float(j) / float(leafDetail);
 
-            // Interpolate between base and tip with a slight curve
             float curveOffset = 0.1f * std::sin(t * M_PI);
             float px = baseX * (1.0f - t) + tipX * t + curveOffset * std::cos(leafDirection + M_PI_2);
             float pz = baseZ * (1.0f - t) + tipZ * t + curveOffset * std::sin(leafDirection + M_PI_2);
-            float py = baseY + (tipY - baseY) * (t * t);  // Quadratic curve up
+            float py = baseY + (tipY - baseY) * (t * t);
 
-            // Width decreases from base to tip
             float width = 0.06f * (1.0f - t * 0.8f);
-
-            // Calculate two points for the width of the leaf
             float widthAngle = leafDirection + M_PI_2;
             float wx = width * std::cos(widthAngle);
             float wz = width * std::sin(widthAngle);
 
-            // Left edge vertex
+            // Bord gauche
             vertices.push_back(px - wx);
             vertices.push_back(py);
             vertices.push_back(pz - wz);
-            vertices.push_back(wx);           // Use simplified normals
-            vertices.push_back(1.0f - t);     // Normal more vertical near tip
+            vertices.push_back(wx);
+            vertices.push_back(1.0f - t);
             vertices.push_back(wz);
 
-            // Right edge vertex
+            // Bord droit
             vertices.push_back(px + wx);
             vertices.push_back(py);
             vertices.push_back(pz + wz);
-            vertices.push_back(-wx);          // Use simplified normals
-            vertices.push_back(1.0f - t);     // Normal more vertical near tip
+            vertices.push_back(-wx);
+            vertices.push_back(1.0f - t);
             vertices.push_back(-wz);
         }
     }
 
-    // Generate indices for body
+    // Indices corps
     for (int i = 0; i < stacks; ++i) {
         for (int j = 0; j < slices; ++j) {
             int first = i * (slices + 1) + j;
@@ -767,19 +840,17 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
         }
     }
 
-    // Generate indices for crown leaves
+    // Indices couronne
     int crownCenterIndex = (stacks + 1) * (slices + 1);
     int leafBaseIndex = crownCenterIndex + 1;
 
     for (int i = 0; i < leaves; ++i) {
         int leafOffset = i * (leafDetail + 1) * 2;
 
-        // Connect leaf vertices as triangle strips
         for (int j = 0; j < leafDetail; ++j) {
             int first = leafBaseIndex + leafOffset + j * 2;
             int second = first + 2;
 
-            // Two triangles for each leaf segment
             indices.push_back(first);
             indices.push_back(first + 1);
             indices.push_back(second);
@@ -789,20 +860,17 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
             indices.push_back(second + 1);
         }
 
-        // Connect first segment to center point
         int first = leafBaseIndex + leafOffset;
-
         indices.push_back(crownCenterIndex);
         indices.push_back(first);
         indices.push_back(first + 1);
     }
 
-    // Apply cut plane if this is a fragment
     if (m_isFragment) {
         applyFragmentCutPlane(vertices, indices);
     }
 
-    // Bind VAO and load data
+    // Upload data to GPU and set vertex attrib pointers
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(m_vao);
 
     this->glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
@@ -811,17 +879,199 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
     this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
 
-    // Position attribute
+    // Position (loc 0)
     this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     this->glEnableVertexAttribArray(0);
 
-    // Normal attribute
+    // Normal (loc 1)
     this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     this->glEnableVertexAttribArray(1);
 
-    // Draw the pineapple
-    this->glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
+    // Dessiner le corps en jaune/orangé
+    int bodyQuads = stacks * slices;
+    int bodyIndexCount = bodyQuads * 6;
 
-    // Unbind
+
+    shaderProgram->setUniformValue("useTexture", false);
+    shaderProgram->setUniformValue("color", QVector4D(0.85f, 0.65f, 0.25f, 1.0f));  // Jaune-orange
+    glDrawElements(GL_TRIANGLES, bodyIndexCount, GL_UNSIGNED_INT, 0);
+
+    // Dessiner la couronne en vert
+    int crownIndexCount = indices.size() - bodyIndexCount;
+    const void* crownIndicesOffset = (const void*)(bodyIndexCount * sizeof(GLuint));
+
+    shaderProgram->setUniformValue("color", QVector4D(0.05f, 0.3f, 0.05f, 1.0f));  // Vert foncé
+    glDrawElements(GL_TRIANGLES, crownIndexCount, GL_UNSIGNED_INT, crownIndicesOffset);
+
+    // Cleanup
+    QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
+}
+
+
+
+void Projectile::renderFraise(QOpenGLShaderProgram* shaderProgram) {
+    const int stacks = 24;
+    const int slices = 36;
+    const float radius = 0.32f;   // Corps un peu plus petit (au lieu de 0.35f)
+    const float height = 0.6f;   // Hauteur légèrement réduite
+
+    std::vector<GLfloat> verticesBody;
+    std::vector<GLuint> indicesBody;
+    std::vector<GLfloat> verticesLeaves;
+    std::vector<GLuint> indicesLeaves;
+
+    // --- Génération corps fraise (cône arrondi) ---
+    for (int i = 0; i <= stacks; ++i) {
+        float v = float(i) / float(stacks);
+        float theta = M_PI * v / 2.0f;
+        float r = radius * (1.0f - v * 0.9f) * std::sin(theta);
+        float y = height * (1.0f - v);
+
+        for (int j = 0; j <= slices; ++j) {
+            float u = float(j) / float(slices);
+            float phi = 2.0f * M_PI * u;
+
+            float x = r * std::cos(phi);
+            float z = r * std::sin(phi);
+
+            QVector3D normal = QVector3D(x, radius * 0.6f, z).normalized();
+
+            verticesBody.push_back(x);
+            verticesBody.push_back(y);
+            verticesBody.push_back(z);
+
+            verticesBody.push_back(normal.x());
+            verticesBody.push_back(normal.y());
+            verticesBody.push_back(normal.z());
+
+            verticesBody.push_back(u);
+            verticesBody.push_back(v);
+        }
+    }
+
+    for (int i = 0; i < stacks; ++i) {
+        for (int j = 0; j < slices; ++j) {
+            int first = i * (slices + 1) + j;
+            int second = first + slices + 1;
+
+            indicesBody.push_back(first);
+            indicesBody.push_back(second);
+            indicesBody.push_back(first + 1);
+
+            indicesBody.push_back(second);
+            indicesBody.push_back(second + 1);
+            indicesBody.push_back(first + 1);
+        }
+    }
+
+    // --- Génération feuilles ---
+    const int leafCount = 8;
+    const float leafRadius = radius * 0.2f;   // Feuilles un peu plus petites (au lieu de 0.25f)
+    const float leafHeight = 0.04f;            // Feuilles un peu plus basses (au lieu de 0.05f)
+    const float crownY = height;                // Directement au sommet, sans espace (au lieu de height - 0.01f)
+
+    for (int i = 0; i < leafCount; ++i) {
+        float angle = 2.0f * M_PI * i / leafCount;
+        float nextAngle = 2.0f * M_PI * (i + 1) / leafCount;
+
+        float x1 = leafRadius * std::cos(angle);
+        float z1 = leafRadius * std::sin(angle);
+
+        float x2 = leafRadius * std::cos(nextAngle);
+        float z2 = leafRadius * std::sin(nextAngle);
+
+        float tipX = (leafRadius + 0.02f) * std::cos(angle + M_PI / leafCount);  // Un peu plus rapproché (au lieu de +0.03f)
+        float tipZ = (leafRadius + 0.02f) * std::sin(angle + M_PI / leafCount);
+        float tipY = crownY + leafHeight;
+
+        QVector3D normalBase1 = QVector3D(x1, 0.0f, z1).normalized();
+        QVector3D normalBase2 = QVector3D(x2, 0.0f, z2).normalized();
+        QVector3D normalTip = QVector3D(tipX, leafHeight, tipZ).normalized();
+
+        verticesLeaves.push_back(x1);
+        verticesLeaves.push_back(crownY);
+        verticesLeaves.push_back(z1);
+
+        verticesLeaves.push_back(normalBase1.x());
+        verticesLeaves.push_back(normalBase1.y());
+        verticesLeaves.push_back(normalBase1.z());
+
+        verticesLeaves.push_back(0.0f);
+        verticesLeaves.push_back(0.0f);
+
+        verticesLeaves.push_back(x2);
+        verticesLeaves.push_back(crownY);
+        verticesLeaves.push_back(z2);
+
+        verticesLeaves.push_back(normalBase2.x());
+        verticesLeaves.push_back(normalBase2.y());
+        verticesLeaves.push_back(normalBase2.z());
+
+        verticesLeaves.push_back(1.0f);
+        verticesLeaves.push_back(0.0f);
+
+        verticesLeaves.push_back(tipX);
+        verticesLeaves.push_back(tipY);
+        verticesLeaves.push_back(tipZ);
+
+        verticesLeaves.push_back(normalTip.x());
+        verticesLeaves.push_back(normalTip.y());
+        verticesLeaves.push_back(normalTip.z());
+
+        verticesLeaves.push_back(0.5f);
+        verticesLeaves.push_back(1.0f);
+
+        GLuint idx = i * 3;
+        indicesLeaves.push_back(idx);
+        indicesLeaves.push_back(idx + 1);
+        indicesLeaves.push_back(idx + 2);
+    }
+
+    if (m_isFragment)
+        applyFragmentCutPlane(verticesBody, indicesBody);
+
+    QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(m_vao);
+
+    // --- Upload et dessin du corps ---
+    this->glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
+    this->glBufferData(GL_ARRAY_BUFFER, verticesBody.size() * sizeof(GLfloat), verticesBody.data(), GL_STATIC_DRAW);
+
+    this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
+    this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesBody.size() * sizeof(GLuint), indicesBody.data(), GL_STATIC_DRAW);
+
+    this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    this->glEnableVertexAttribArray(0);
+
+    this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    this->glEnableVertexAttribArray(1);
+
+    this->glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    this->glEnableVertexAttribArray(2);
+
+    if (m_hasTexture && m_texture) {
+        shaderProgram->setUniformValue("useTexture", true);
+        m_texture->bind(0);
+        shaderProgram->setUniformValue("appleTexture", 0);
+    } else {
+        shaderProgram->setUniformValue("useTexture", false);
+        shaderProgram->setUniformValue("color", QVector4D(1.0f, 0.1f, 0.2f, 1.0f));  // Rouge fraise
+    }
+
+    this->glDrawElements(GL_TRIANGLES, indicesBody.size(), GL_UNSIGNED_INT, 0);
+
+    if (m_hasTexture && m_texture) {
+        m_texture->release();
+        glBindTexture(GL_TEXTURE_2D, 0);
+    }
+
+    // --- Upload et dessin des feuilles ---
+    this->glBufferData(GL_ARRAY_BUFFER, verticesLeaves.size() * sizeof(GLfloat), verticesLeaves.data(), GL_STATIC_DRAW);
+    this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesLeaves.size() * sizeof(GLuint), indicesLeaves.data(), GL_STATIC_DRAW);
+
+    shaderProgram->setUniformValue("useTexture", false);
+    shaderProgram->setUniformValue("color", QVector4D(0.05f, 0.35f, 0.05f, 1.0f)); // Vert feuilles un peu plus foncé
+
+    this->glDrawElements(GL_TRIANGLES, indicesLeaves.size(), GL_UNSIGNED_INT, 0);
+
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
 }

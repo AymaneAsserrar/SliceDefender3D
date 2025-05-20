@@ -81,6 +81,9 @@ private:
     void drawSphere(float radius, int lats, int longs);
     void drawSword(); // Declaration of drawSword method
 
+
+    QOpenGLTexture* bladeTexture = nullptr;
+
     // Calculate matrix data
     QMatrix4x4 projection;
     QMatrix4x4 view;

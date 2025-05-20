@@ -28,7 +28,7 @@ int main(int argc, char *argv[]) {
     // Optionally: pass palmTracker to mainWindow or link WebcamHandler here
     // e.g., mainWindow->setPalmTracker(palmTracker);
 
-    mainWindow->show();
+    mainWindow->showMaximized();
 
     return app.exec();
 }

@@ -1,11 +1,12 @@
 <RCC>
-    <qresource prefix="/new/prefix1">
-        <file>resources/images/banana_texture.jpg</file>
-    </qresource>
     <qresource prefix="/new/prefix2">
         <file>resources/images/apple_texture.jpg</file>
         <file>resources/images/banana2_texture.jpg.png</file>
         <file>resources/images/ananas_texture.jpg</file>
         <file>resources/images/ananas2_texture.jpg</file>
+        <file>resources/images/Fraise_texture.jpg</file>
+        <file>resources/images/blade_texture.jpg</file>
+        <file>resources/images/banana3_texture.jpg</file>
+        <file>resources/images/banana4_texture.jpg</file>
     </qresource>
 </RCC>
