@@ -8,5 +8,6 @@
         <file>resources/images/blade_texture.jpg</file>
         <file>resources/images/banana3_texture.jpg</file>
         <file>resources/images/banana4_texture.jpg</file>
+        <file>resources/images/wood_texture.jpeg</file>
     </qresource>
 </RCC>

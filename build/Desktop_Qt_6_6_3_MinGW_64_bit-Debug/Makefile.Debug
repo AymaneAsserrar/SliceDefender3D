@@ -141,6 +141,7 @@ debug/qrc_resources.cpp: ../../resources.qrc \
 		../../resources/images/banana2_texture.jpg.png \
 		../../resources/images/blade_texture.jpg \
 		../../resources/images/Fraise_texture.jpg \
+		../../resources/images/wood_texture.jpeg \
 		../../resources/images/banana3_texture.jpg \
 		../../resources/images/apple_texture.jpg \
 		../../resources/images/banana4_texture.jpg \

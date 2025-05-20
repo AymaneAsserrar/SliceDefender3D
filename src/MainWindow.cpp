@@ -18,14 +18,26 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new
     openglWidget->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Expanding);
     mainLayout->addWidget(openglWidget, 3); // Stretch factor 3 for OpenGLWidget
 
-    // Right: Vertical column
-    QVBoxLayout *rightLayout = new QVBoxLayout();
+    // Right container widget with background image
+    QWidget* rightWidget = new QWidget(this);
+    rightWidget->setStyleSheet(
+        "QWidget {"
+        "   background-image: url(:/images/wood_tile.jpg);"
+        "   background-repeat: no-repeat;"
+        "   background-position: center;"
+        "   background-attachment: fixed;"
+        "   background-size: cover;"
+        "}"
+        );
+
+    // Right: Vertical layout inside rightWidget
+    QVBoxLayout* rightLayout = new QVBoxLayout(rightWidget);
 
     // Webcam feed
     cameraLabel = new QLabel("Camera Feed", this);
     cameraLabel->setAlignment(Qt::AlignCenter);
     cameraLabel->setStyleSheet("background-color: black;");
-    cameraLabel->setFixedSize(320, 240); // Fixed size for the webcam feed
+    cameraLabel->setFixedSize(320, 240);
 
     // Score and Time labels
     scoreLabel = new QLabel("Score: 0", this);
@@ -33,16 +45,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new
     scoreLabel->setAlignment(Qt::AlignCenter);
     timeLabel->setAlignment(Qt::AlignCenter);
 
-    // Stylish font and colors for score and time labels
+    // Stylish font and semi-transparent backgrounds for labels
     scoreLabel->setStyleSheet(
         "QLabel {"
         "   font-size: 20px;"
         "   font-weight: bold;"
-        "   color: #2E7D32;"     // nice green
+        "   color: #2E7D32;"
         "   padding: 10px;"
         "   border: 2px solid #81C784;"
         "   border-radius: 12px;"
-        "   background-color: #E8F5E9;"  // light green background
+        "   background-color: rgba(232, 245, 233, 180);"  // semi-transparent light green
         "}"
         );
 
@@ -50,11 +62,11 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new
         "QLabel {"
         "   font-size: 18px;"
         "   font-weight: semi-bold;"
-        "   color: #1565C0;"     // deep blue
+        "   color: #1565C0;"
         "   padding: 8px;"
         "   border: 2px solid #64B5F6;"
         "   border-radius: 12px;"
-        "   background-color: #E3F2FD;"  // light blue background
+        "   background-color: rgba(227, 242, 253, 180);"  // semi-transparent light blue
         "}"
         );
 
@@ -62,9 +74,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new
     rightLayout->addWidget(cameraLabel);
     rightLayout->addWidget(scoreLabel);
     rightLayout->addWidget(timeLabel);
-    rightLayout->addStretch(); // Push labels to the top
+    rightLayout->addStretch();  // Push labels to the top
 
-    mainLayout->addLayout(rightLayout, 1); // Stretch factor 1 for right layout
+    // Add right widget (with background) to main layout
+    mainLayout->addWidget(rightWidget, 1);
 
     setCentralWidget(centralWidget);
 
@@ -118,7 +131,6 @@ void MainWindow::onHandDetected(const QPoint &center) {
     if (!openglWidget) return;
 
     QSize camSize = !cameraLabel->pixmap().isNull() ? cameraLabel->pixmap().size() : cameraLabel->size();
-
 
     float normX = float(center.x()) / float(camSize.width());
     float normY = float(center.y()) / float(camSize.height());
