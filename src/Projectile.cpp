@@ -2,6 +2,7 @@
 #include <QtMath>
 #include <QOpenGLContext>
 #include <QRandomGenerator>
+#include <set>
 
 Projectile::Projectile(Type type, const QVector3D& position, const QVector3D& velocity)
     : m_type(type), 
@@ -15,7 +16,9 @@ Projectile::Projectile(Type type, const QVector3D& position, const QVector3D& ve
       m_vbo(0),
       m_ebo(0),
       m_initialized(false),
-      m_isFragment(false)
+      m_isFragment(false),
+     m_texture(nullptr),
+      m_hasTexture(false)
 {
     // Random initial rotation
     m_rotationAngle = QRandomGenerator::global()->bounded(360);
@@ -39,18 +42,48 @@ Projectile::~Projectile() {
 }
 
 void Projectile::initializeGL() {
+
     if (m_initialized) return;
-    
+
     initializeOpenGLFunctions();
-    
+
     // Create VAO and VBO
-    // Use QOpenGLExtraFunctions for this call
     QOpenGLContext::currentContext()->extraFunctions()->glGenVertexArrays(1, &m_vao);
     this->glGenBuffers(1, &m_vbo);
     this->glGenBuffers(1, &m_ebo);
-    
+
+
+
+
+
+
+
+
+    // --- Texture ---
+    if (m_type == Type::APPLE) {   // Charge la texture uniquement pour la pomme (ou en fonction du type)
+        if (m_texture) delete m_texture; // sécurité
+
+        m_texture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/apple_texture.jpg").mirrored());
+        m_texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+        m_texture->setMagnificationFilter(QOpenGLTexture::Linear);
+        m_texture->setWrapMode(QOpenGLTexture::Repeat);
+        m_hasTexture = true;
+    }
+
+    else if (m_type == Type::BANANA) {
+        if (m_texture) delete m_texture;
+        m_texture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/banana2_texture.jpg").mirrored());
+        m_texture->setMinificationFilter(QOpenGLTexture::LinearMipMapLinear);
+        m_texture->setMagnificationFilter(QOpenGLTexture::Linear);
+        m_texture->setWrapMode(QOpenGLTexture::Repeat);
+        m_hasTexture= true;
+    }
+
+
+
     m_initialized = true;
 }
+
 
 void Projectile::update(float deltaTime) {
     if (!m_active) return;
@@ -75,61 +108,68 @@ void Projectile::update(float deltaTime) {
 
 void Projectile::render(QOpenGLShaderProgram* shaderProgram, const QMatrix4x4& projection, const QMatrix4x4& view) {
     if (!m_active || !m_initialized) return;
-    
-    // Calculate model matrix
+
+    // Désactiver la texture par défaut
+    shaderProgram->setUniformValue("useTexture", false);
+    glBindTexture(GL_TEXTURE_2D, 0);
+
+    // Matrice modèle
     QMatrix4x4 model;
     model.translate(m_position);
     model.rotate(m_rotationAngle, m_rotationAxis);
     model.scale(m_scale);
-    
-    // Set shader uniforms
+
+    // Uniformes de base
     shaderProgram->setUniformValue("mvpMatrix", projection * view * model);
     shaderProgram->setUniformValue("modelMatrix", model);
     shaderProgram->setUniformValue("normalMatrix", model.normalMatrix());
-    
-    // Set color based on fruit type
+
+    // Couleur selon le type et si c’est un fragment
     QVector4D color;
     switch (m_type) {
-        case Type::BANANA:
-            // For fragments, show inner banana color (slightly lighter)
-            if (m_isFragment) {
-                color = QVector4D(1.0f, 0.98f, 0.8f, 1.0f); // Creamy white for banana flesh
-            } else {
-                color = QVector4D(1.0f, 0.9f, 0.0f, 1.0f); // Yellow for skin
-            }
-            break;
-        case Type::APPLE:
-            // For fragments, show inner apple color - pure white with slight cream tint
-            if (m_isFragment) {
-                color = QVector4D(0.98f, 0.98f, 0.95f, 1.0f); // Almost pure white for apple flesh
-            } else {
-                color = QVector4D(0.4f, 0.8f, 0.2f, 1.0f); // Green apple skin
-            }
-            break;
-        case Type::ANANAS:
-            // For fragments, show inner pineapple color - more yellow-white
-            if (m_isFragment) {
-                color = QVector4D(0.98f, 0.93f, 0.7f, 1.0f); // Pale yellow for pineapple flesh
-            } else {
-                color = QVector4D(0.9f, 0.7f, 0.1f, 1.0f); // Golden yellow for outside
-            }
-            break;
+    case Type::BANANA:
+        color = m_isFragment ? QVector4D(1.0f, 0.98f, 0.8f, 1.0f) : QVector4D(1.0f, 0.9f, 0.0f, 1.0f);
+        break;
+    case Type::APPLE:
+        color = m_isFragment ? QVector4D(0.98f, 0.98f, 0.95f, 1.0f) : QVector4D(0.4f, 0.8f, 0.2f, 1.0f);
+        break;
+    case Type::ANANAS:
+        color = m_isFragment ? QVector4D(0.98f, 0.93f, 0.7f, 1.0f) : QVector4D(0.9f, 0.7f, 0.1f, 1.0f);
+        break;
     }
     shaderProgram->setUniformValue("color", color);
-    
-    // Render based on fruit type
+
+    // Si c’est un fragment, on passe des infos en plus pour le rendu du plan de coupe
+    if (m_isFragment) {
+        shaderProgram->setUniformValue("isFragment", true);
+        shaderProgram->setUniformValue("sliceNormal", m_sliceNormal);
+        shaderProgram->setUniformValue("fragmentSide", m_fragmentSide);
+    } else {
+        shaderProgram->setUniformValue("isFragment", false);
+    }
+
+    // Rendu selon le type de fruit
     switch (m_type) {
-        case Type::BANANA:
-            renderBanana(shaderProgram);
-            break;
-        case Type::APPLE:
-            renderApple(shaderProgram);
-            break;
-        case Type::ANANAS:
-            renderAnanas(shaderProgram);
-            break;
+    case Type::BANANA:
+        shaderProgram->setUniformValue("useTexture", true);
+        renderBanana(shaderProgram);
+        shaderProgram->setUniformValue("useTexture", false);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        break;
+    case Type::APPLE:
+        shaderProgram->setUniformValue("useTexture", true);
+        renderApple(shaderProgram);
+        shaderProgram->setUniformValue("useTexture", false);
+        glBindTexture(GL_TEXTURE_2D, 0);
+        break;
+    case Type::ANANAS:
+        shaderProgram->setUniformValue("useTexture", false);
+        renderAnanas(shaderProgram);
+        break;
     }
 }
+
+
 
 bool Projectile::checkCollisionWithCylinder(float radius, float height, const QVector3D& cylinderPosition) {
     if (!m_active) return false;
@@ -202,7 +242,7 @@ std::vector<Projectile> Projectile::slice() {
         
         // Initialize OpenGL resources
         fragment.initializeGL();
-        
+
         fragments.push_back(fragment);
     }
     
@@ -361,280 +401,232 @@ void Projectile::applyFragmentCutPlane(std::vector<GLfloat>& vertices, std::vect
 }
 
 // Update rendering methods to handle fragments
-void Projectile::renderBanana(QOpenGLShaderProgram* /* shaderProgram */) {
-    // More detailed banana with curved shape and realistic proportions
-    const int segments = 12;  // Increase segments for smoother curve
+void Projectile::renderBanana(QOpenGLShaderProgram* shaderProgram) {
+    const int segments = 12;
     const float baseRadius = 0.06f;
     const float length = 0.4f;
-    
+
     std::vector<GLfloat> vertices;
     std::vector<GLuint> indices;
-    
-    // Create the banana using a curved cylinder with varying radius
-    // Main body of banana
+
     for (int i = 0; i <= segments; ++i) {
-        float t = float(i) / float(segments);  // Parameter along banana length
-        
-        // Calculate positions along a curved path (banana curve)
-        float angle = t * M_PI * 0.75f;  // 3/4 of a circle for the curve
-        
-        // Center position along curved path
+        float t = float(i) / float(segments);  // De 0 à 1
+        float angle = t * M_PI * 0.75f;
+
         float centerX = length * 0.5f * std::sin(angle);
         float centerY = length * 0.5f * (1.0f - std::cos(angle));
         float centerZ = 0.0f;
-        
-        // Vary radius along the banana for tapered ends
+
         float radiusFactor = std::sin(t * M_PI);
         float currentRadius = baseRadius * radiusFactor;
-        
-        // Create circle at this position
+
         for (int j = 0; j <= 16; ++j) {
             float circleAngle = 2.0f * M_PI * float(j) / 16.0f;
-            
-            // Vary shape slightly to make it more oval in cross-section
             float ovalFactor = 0.8f + 0.2f * std::cos(circleAngle);
-            
-            // Calculate position on circle
+
             float x = centerX + currentRadius * ovalFactor * std::cos(circleAngle);
             float y = centerY;
             float z = centerZ + currentRadius * std::sin(circleAngle);
-            
-            // Calculate normal
+
+            // Normales
             float nx = std::cos(circleAngle);
-            // Remove unused variable ny
             float nz = std::sin(circleAngle);
-            
-            // Adjust normal direction based on banana curve
-            float normalAngle = angle + M_PI_2;  // Perpendicular to curve
+
+            float normalAngle = angle + M_PI_2;
             float normalFactorX = std::cos(normalAngle);
             float normalFactorY = std::sin(normalAngle);
-            
+
             float adjustedNx = nx * normalFactorX - normalFactorY;
             float adjustedNy = nx * normalFactorY + normalFactorX;
-            
-            // Normalize the normal vector
-            float len = std::sqrt(adjustedNx*adjustedNx + adjustedNy*adjustedNy + nz*nz);
-            
-            // Add vertex data
-            vertices.push_back(x);  // Position
+
+            float len = std::sqrt(adjustedNx * adjustedNx + adjustedNy * adjustedNy + nz * nz);
+
+            // Coordonnées de texture
+            float u = float(j) / 16.0f;
+            float v = t;
+
+            // Ajout des données : x y z nx ny nz u v
+            vertices.push_back(x);
             vertices.push_back(y);
             vertices.push_back(z);
-            vertices.push_back(adjustedNx/len);  // Normal
-            vertices.push_back(adjustedNy/len);
-            vertices.push_back(nz/len);
+            vertices.push_back(adjustedNx / len);
+            vertices.push_back(adjustedNy / len);
+            vertices.push_back(nz / len);
+            vertices.push_back(u);
+            vertices.push_back(v);
         }
     }
-    
-    // Generate indices for banana body
-    const int verticesPerRing = 17;  // 16 segments + 1 duplicate for texture wrap
+
+    // Indices
+    const int verticesPerRing = 17;
     for (int i = 0; i < segments; ++i) {
         for (int j = 0; j < 16; ++j) {
             int current = i * verticesPerRing + j;
             int next = current + verticesPerRing;
-            
-            // Two triangles per quad
+
             indices.push_back(current);
             indices.push_back(next);
             indices.push_back(current + 1);
-            
+
             indices.push_back(current + 1);
             indices.push_back(next);
             indices.push_back(next + 1);
         }
     }
-    
-    // Apply cut plane if this is a fragment
+
     if (m_isFragment) {
         applyFragmentCutPlane(vertices, indices);
     }
-    
-    // Bind VAO and load data
+
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(m_vao);
-    
+
     this->glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     this->glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
-    
+
     this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
-    
-    // Position attribute
-    this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+
+    // Attributs
+    this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);                // Position
     this->glEnableVertexAttribArray(0);
-    
-    // Normal attribute
-    this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+
+    this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float))); // Normale
     this->glEnableVertexAttribArray(1);
-    
-    // Draw the banana
+
+    this->glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); // Texture
+    this->glEnableVertexAttribArray(2);
+
+    // Texture ?
+    if (m_hasTexture && m_texture) {
+        shaderProgram->setUniformValue("useTexture", true);
+        m_texture->bind(0);
+        shaderProgram->setUniformValue("appleTexture", 0); // Uniform identique à celui utilisé pour la pomme
+    } else {
+        shaderProgram->setUniformValue("useTexture", false);
+    }
+
     this->glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-    
-    // Unbind
+
+    if (m_hasTexture && m_texture) {
+        m_texture->release();
+    }
+
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
 }
 
-void Projectile::renderApple(QOpenGLShaderProgram* /* shaderProgram */) {
-    // Green apple with slightly elongated shape
+
+void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
     const int stacks = 24;
     const int slices = 36;
     const float radius = 0.45f;
-    const float heightFactor = 1.1f; // Make slightly taller for green apple shape
-    
+    const float heightFactor = 1.1f;
+
     std::vector<GLfloat> vertices;
     std::vector<GLuint> indices;
-    
-    // Generate apple body - a sphere with modifications for green apple shape
+
     for (int i = 0; i <= stacks; ++i) {
         float v = float(i) / float(stacks);
         float phi = M_PI * v;
-        
-        // Modify shape for green apple characteristics
         float r = radius;
-        
-        // Less pronounced indentation at top and slightly more elongated
-        if (v < 0.2f) {  // Top indentation
+
+        if (v < 0.2f)
             r = radius * (0.9f + 0.1f * (v / 0.2f));
-        } else if (v > 0.8f) {  // Bottom indentation
+        else if (v > 0.8f)
             r = radius * (0.98f - 0.08f * (v - 0.8f) / 0.2f);
-        }
-        
-        // Slight elongation for green apple
-        if (v >= 0.3f && v <= 0.7f) {
-            float bulge = std::sin((v - 0.3f) / 0.4f * M_PI);
-            r *= (1.0f + 0.08f * bulge);  // 8% bulge (more than red apple)
-        }
-        
+
+        if (v >= 0.3f && v <= 0.7f)
+            r *= (1.0f + 0.08f * std::sin((v - 0.3f) / 0.4f * M_PI));
+
         float sinPhi = std::sin(phi);
         float cosPhi = std::cos(phi);
-        
+
         for (int j = 0; j <= slices; ++j) {
             float u = float(j) / float(slices);
             float theta = 2.0f * M_PI * u;
             float sinTheta = std::sin(theta);
             float cosTheta = std::cos(theta);
-            
-            // Position - apply height factor for elongated shape
+
             float x = r * sinPhi * cosTheta;
-            float y = r * cosPhi * heightFactor; // Elongate in y-direction
+            float y = r * cosPhi * heightFactor;
             float z = r * sinPhi * sinTheta;
-            
-            // Normal - adjusted for the modified shape
+
             float nx = sinPhi * cosTheta;
             float ny = cosPhi;
             float nz = sinPhi * sinTheta;
-            
-            // Normalize the normal vector
-            float len = std::sqrt(nx*nx + ny*ny + nz*nz);
-            
+            float len = std::sqrt(nx * nx + ny * ny + nz * nz);
+
             vertices.push_back(x);
             vertices.push_back(y);
             vertices.push_back(z);
-            vertices.push_back(nx/len);
-            vertices.push_back(ny/len);
-            vertices.push_back(nz/len);
+            vertices.push_back(nx / len);
+            vertices.push_back(ny / len);
+            vertices.push_back(nz / len);
+            vertices.push_back(u); // texture u
+            vertices.push_back(v); // texture v
         }
     }
-    
-    // Add stem at the top of the apple - make stem slightly longer and thinner
-    const float stemHeight = 0.18f;
-    const float stemRadius = 0.025f;
-    const int stemSegments = 8;
-    const float stemTilt = 0.15f;  // Less tilt for green apple
-    
-    for (int i = 0; i <= stemSegments; ++i) {
-        float t = float(i) / float(stemSegments);
-        float stemY = radius * 0.85f + t * stemHeight;  // Start from the top indentation
-        
-        // Make stem curve slightly
-        float offsetX = stemTilt * std::sin(t * M_PI_2);
-        
-        for (int j = 0; j <= 8; ++j) {
-            float angle = 2.0f * M_PI * float(j) / 8.0f;
-            float cosAngle = std::cos(angle);
-            float sinAngle = std::sin(angle);
-            
-            // Create stem with slight tapering
-            float taperFactor = 1.0f - 0.3f * t;  // Stem gets thinner at top
-            
-            float stemX = offsetX + stemRadius * taperFactor * cosAngle;
-            float stemZ = stemRadius * taperFactor * sinAngle;
-            
-            // Normal for stem - points outward from center
-            float nx = cosAngle;
-            float ny = 0.2f;  // Slight upward component
-            float nz = sinAngle;
-            float normalLen = std::sqrt(nx*nx + ny*ny + nz*nz);
-            
-            // Add vertex
-            vertices.push_back(stemX);
-            vertices.push_back(stemY);
-            vertices.push_back(stemZ);
-            vertices.push_back(nx/normalLen);
-            vertices.push_back(ny/normalLen);
-            vertices.push_back(nz/normalLen);
-        }
-    }
-    
-    // Generate indices for apple body
+
+    // Indices
     for (int i = 0; i < stacks; ++i) {
         for (int j = 0; j < slices; ++j) {
             int first = i * (slices + 1) + j;
             int second = first + slices + 1;
-            
+
             indices.push_back(first);
             indices.push_back(second);
             indices.push_back(first + 1);
-            
+
             indices.push_back(second);
             indices.push_back(second + 1);
             indices.push_back(first + 1);
         }
     }
-    
-    // Generate indices for stem
-    int stemBaseIndex = (stacks + 1) * (slices + 1);
-    for (int i = 0; i < stemSegments; ++i) {
-        for (int j = 0; j < 8; ++j) {
-            int first = stemBaseIndex + i * 9 + j;
-            int second = first + 9;
-            
-            indices.push_back(first);
-            indices.push_back(second);
-            indices.push_back(first + 1);
-            
-            indices.push_back(second);
-            indices.push_back(second + 1);
-            indices.push_back(first + 1);
-        }
-    }
-    
-    // Apply cut plane if this is a fragment
-    if (m_isFragment) {
+
+    if (m_isFragment)
         applyFragmentCutPlane(vertices, indices);
-    }
-    
-    // Bind VAO and load data
+
+    // Bind VAO
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(m_vao);
-    
+
+    // Upload les buffers à chaque frame (ok pour projet simple)
     this->glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     this->glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
-    
+
     this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
-    
-    // Position attribute
-    this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
+
+    // Attribs
+    this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
     this->glEnableVertexAttribArray(0);
-    
-    // Normal attribute
-    this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
+
+    this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
     this->glEnableVertexAttribArray(1);
-    
-    // Draw the apple
+
+    this->glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    this->glEnableVertexAttribArray(2);
+
+    // Active texture
+    if (m_hasTexture && m_texture) {
+        shaderProgram->setUniformValue("useTexture", true);
+        m_texture->bind(0);
+        shaderProgram->setUniformValue("appleTexture", 0);
+    } else {
+        shaderProgram->setUniformValue("useTexture", false);
+    }
+
+    // Draw
     this->glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-    
-    // Unbind
+
+    // Cleanup
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
+
+    if (m_hasTexture && m_texture) {
+        m_texture->release(); // Important pour éviter la pollution
+        glBindTexture(GL_TEXTURE_2D, 0); // Sécurité : force à désactiver
+    }
 }
+
+
 
 void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
     // More detailed pineapple with texture pattern and spiky crown
@@ -643,15 +635,15 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
     const float bodyHeight = 0.8f;
     const float bodyRadius = 0.3f;
     const float crownHeight = 0.4f;
-    
+
     std::vector<GLfloat> vertices;
     std::vector<GLuint> indices;
-    
+
     // Generate pineapple body with diamond pattern texture
     for (int i = 0; i <= stacks; ++i) {
         float v = float(i) / float(stacks);
         float y = -bodyHeight/2 + v * bodyHeight;
-        
+
         // Vary radius to create slight bulge in middle
         float radiusFactor = 1.0f;
         if (v < 0.2f) {
@@ -661,31 +653,31 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
         } else {
             radiusFactor = 1.0f + 0.05f * std::sin((v - 0.2f) / 0.6f * M_PI);  // Slight bulge
         }
-        
+
         float currentRadius = bodyRadius * radiusFactor;
-        
+
         for (int j = 0; j <= slices; ++j) {
             float u = float(j) / float(slices);
             float theta = 2.0f * M_PI * u;
             float cosTheta = std::cos(theta);
             float sinTheta = std::sin(theta);
-            
+
             // Create diamond pattern effect
             float bumpDepth = 0.03f * std::sin(v * 40.0f) * std::sin(u * 40.0f);
             float bumpRadius = currentRadius + bumpDepth;
-            
+
             // Position
             float x = bumpRadius * cosTheta;
             float z = bumpRadius * sinTheta;
-            
+
             // Normal calculation for bumpy surface
             float nx = cosTheta;
             float ny = bumpDepth * 4.0f;  // Exaggerate normal for bump effect
             float nz = sinTheta;
-            
+
             // Normalize the normal
             float len = std::sqrt(nx*nx + ny*ny + nz*nz);
-            
+
             vertices.push_back(x);
             vertices.push_back(y);
             vertices.push_back(z);
@@ -694,11 +686,11 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
             vertices.push_back(nz/len);
         }
     }
-    
+
     // Generate crown as a set of spiky leaves
     const int leaves = 16;    // Number of leaves
     const int leafDetail = 4; // Detail level of each leaf
-    
+
     // First add center point for crown
     vertices.push_back(0.0f);                // x
     vertices.push_back(bodyHeight/2);        // y
@@ -706,41 +698,41 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
     vertices.push_back(0.0f);                // nx
     vertices.push_back(1.0f);                // ny
     vertices.push_back(0.0f);                // nz
-    
+
     // Add leaves radiating from center
     for (int i = 0; i < leaves; ++i) {
         float leafAngle = 2.0f * M_PI * float(i) / float(leaves);
         float leafDirection = leafAngle + M_PI_4 * 0.5f * (float(i % 3) - 1.0f);  // Random variation
-        
+
         // Base of leaf
         float baseX = 0.15f * std::cos(leafAngle);
         float baseZ = 0.15f * std::sin(leafAngle);
         float baseY = bodyHeight/2;
-        
+
         // Tip of leaf - varies in height and curvature
         float heightVar = 0.7f + 0.6f * float(i % 3) / 2.0f;  // Vary height
         float tipX = baseX * 0.5f + 0.1f * std::cos(leafDirection);
         float tipZ = baseZ * 0.5f + 0.1f * std::sin(leafDirection);
         float tipY = baseY + crownHeight * heightVar;
-        
+
         // Create the leaf as a tapered shape
         for (int j = 0; j <= leafDetail; ++j) {
             float t = float(j) / float(leafDetail);
-            
+
             // Interpolate between base and tip with a slight curve
             float curveOffset = 0.1f * std::sin(t * M_PI);
             float px = baseX * (1.0f - t) + tipX * t + curveOffset * std::cos(leafDirection + M_PI_2);
             float pz = baseZ * (1.0f - t) + tipZ * t + curveOffset * std::sin(leafDirection + M_PI_2);
             float py = baseY + (tipY - baseY) * (t * t);  // Quadratic curve up
-            
+
             // Width decreases from base to tip
             float width = 0.06f * (1.0f - t * 0.8f);
-            
+
             // Calculate two points for the width of the leaf
             float widthAngle = leafDirection + M_PI_2;
             float wx = width * std::cos(widthAngle);
             float wz = width * std::sin(widthAngle);
-            
+
             // Left edge vertex
             vertices.push_back(px - wx);
             vertices.push_back(py);
@@ -748,88 +740,88 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* /* shaderProgram */) {
             vertices.push_back(wx);           // Use simplified normals
             vertices.push_back(1.0f - t);     // Normal more vertical near tip
             vertices.push_back(wz);
-            
+
             // Right edge vertex
             vertices.push_back(px + wx);
             vertices.push_back(py);
             vertices.push_back(pz + wz);
-            vertices.push_back(-wx);          // Use simplified normals  
+            vertices.push_back(-wx);          // Use simplified normals
             vertices.push_back(1.0f - t);     // Normal more vertical near tip
             vertices.push_back(-wz);
         }
     }
-    
+
     // Generate indices for body
     for (int i = 0; i < stacks; ++i) {
         for (int j = 0; j < slices; ++j) {
             int first = i * (slices + 1) + j;
             int second = first + slices + 1;
-            
+
             indices.push_back(first);
             indices.push_back(second);
             indices.push_back(first + 1);
-            
+
             indices.push_back(second);
             indices.push_back(second + 1);
             indices.push_back(first + 1);
         }
     }
-    
+
     // Generate indices for crown leaves
     int crownCenterIndex = (stacks + 1) * (slices + 1);
     int leafBaseIndex = crownCenterIndex + 1;
-    
+
     for (int i = 0; i < leaves; ++i) {
         int leafOffset = i * (leafDetail + 1) * 2;
-        
+
         // Connect leaf vertices as triangle strips
         for (int j = 0; j < leafDetail; ++j) {
             int first = leafBaseIndex + leafOffset + j * 2;
             int second = first + 2;
-            
+
             // Two triangles for each leaf segment
             indices.push_back(first);
             indices.push_back(first + 1);
             indices.push_back(second);
-            
+
             indices.push_back(second);
             indices.push_back(first + 1);
             indices.push_back(second + 1);
         }
-        
+
         // Connect first segment to center point
         int first = leafBaseIndex + leafOffset;
-        
+
         indices.push_back(crownCenterIndex);
         indices.push_back(first);
         indices.push_back(first + 1);
     }
-    
+
     // Apply cut plane if this is a fragment
     if (m_isFragment) {
         applyFragmentCutPlane(vertices, indices);
     }
-    
+
     // Bind VAO and load data
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(m_vao);
-    
+
     this->glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     this->glBufferData(GL_ARRAY_BUFFER, vertices.size() * sizeof(GLfloat), vertices.data(), GL_STATIC_DRAW);
-    
+
     this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices.size() * sizeof(GLuint), indices.data(), GL_STATIC_DRAW);
-    
+
     // Position attribute
     this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)0);
     this->glEnableVertexAttribArray(0);
-    
+
     // Normal attribute
     this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     this->glEnableVertexAttribArray(1);
-    
+
     // Draw the pineapple
     this->glDrawElements(GL_TRIANGLES, indices.size(), GL_UNSIGNED_INT, 0);
-    
+
     // Unbind
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
 }

@@ -21,19 +21,32 @@ HEADERS += \
 
 # OpenCV
 
-INCLUDEPATH += $$(OPENCV_DIR)/../../include
+#INCLUDEPATH += $$(OPENCV_DIR)/../../include
 
-LIBS += -L$$(OPENCV_DIR)/lib \
-    -lopencv_core4110 \
-    -lopencv_highgui4110 \
-    -lopencv_imgproc4110 \
-    -lopencv_imgcodecs4110 \
-    -lopencv_videoio4110 \
-    -lopencv_features2d4110 \
-    -lopencv_calib3d4110 \
-    -lopencv_objdetect4110 \
-    -lopencv_video4110 \
-    -lopencv_flann4110
+
+
+INCLUDEPATH += C:/opencv/build/install/include
+
+
+LIBS += -L"C:/opencv/build/install/x64/mingw/lib" \
+    -lopencv_core490 \
+    -lopencv_highgui490 \
+    -lopencv_imgproc490 \
+    -lopencv_imgcodecs490 \
+    -lopencv_videoio490 \
+    -lopencv_features2d490 \
+    -lopencv_calib3d490 \
+    -lopencv_objdetect490 \
+    -lopencv_video490 \
+    -lopencv_flann490
 
 
 # RESOURCES += resources.qrc # Comment out or remove if resources.qrc is not used or does not exist
+
+RESOURCES += \
+    resources.qrc
+
+DISTFILES += \
+    resources/.qtcreator/project.json \
+    resources/images/Banana_texture.png \
+    resources/images/apple_texture.jpg

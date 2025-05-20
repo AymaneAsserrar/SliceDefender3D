@@ -5,9 +5,14 @@
 
 WebcamHandler::WebcamHandler(QObject *parent) : QObject(parent), running(false) {
     // Load the palm.xml Haar cascade file
-    if (!palmCascade.load("C:/Users/pc/slicedefender3d/palm.xml")) {
-        qWarning() << "Failed to load palm.xml";
+    QString palmPath = QDir(QCoreApplication::applicationDirPath()).filePath("palm.xml");
+    if (!palmCascade.load(palmPath.toStdString())) {
+        qWarning() << "Failed to load palm.xml from" << palmPath;
+    } else {
+        qDebug() << "Successfully loaded cascade from:" << palmPath;
     }
+
+
 
     // Move this object to a separate thread for processing
     moveToThread(&workerThread);

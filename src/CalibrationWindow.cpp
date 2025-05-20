@@ -45,7 +45,7 @@ CalibrationWindow::CalibrationWindow(QWidget *parent) : QDialog(parent) {
     // Connect signals and slots
     connect(calibrateButton, &QPushButton::clicked, this, &CalibrationWindow::startCalibration);
     connect(finishButton, &QPushButton::clicked, this, &CalibrationWindow::finishCalibration);
-    
+
     // Initialize calibration status
     calibrationComplete = false;
 }
@@ -62,41 +62,42 @@ CalibrationWindow::~CalibrationWindow() {
 bool CalibrationWindow::initializePalmDetection() {
     // Try multiple possible locations for the cascade files
     QStringList possiblePaths;
-    
+
     // Get application directory path
     QString appDir = QCoreApplication::applicationDirPath();
-    QString projectDir = appDir;
-    
+    qDebug() << "Current app directory:" << appDir;
+
     // Add possible locations to search
-    possiblePaths << appDir + "/palm.xml"                         // In build/exe directory
-                  << appDir + "/haarcascade_hand.xml"             // Fallback in build/exe dir
-                  << appDir + "/../palm.xml"                      // One level up
-                  << appDir + "/../haarcascade_hand.xml"          // Fallback one level up
-                  << "C:/Users/pc/Desktop/BDM project/BDM2/palm.xml"       // Absolute path to project root
-                  << "C:/Users/pc/Desktop/BDM project/BDM2/haarcascade_hand.xml"; // Fallback absolute path
-    
-    // Try to find the cascade file in any of the possible locations
+    possiblePaths << appDir + "/palm.xml"
+                  << appDir + "/haarcascade_hand.xml"
+                  << appDir + "/../palm.xml"
+                  << appDir + "/../haarcascade_hand.xml"
+                  //<< appDir + "/../../palm.xml"
+                  //<< appDir + "/../../haarcascade_hand.xml"
+                  << appDir + "C:/Users/benzh/Downloads/slicedefender3d/build/Desktop_Qt_6_6_3_MinGW_64_bit-Debug/debug/haarcascade_hand.xml"
+                  << appDir + "C:/Users/benzh/Downloads/slicedefender3d/build/Desktop_Qt_6_6_3_MinGW_64_bit-Debug/debug/palm.xml";
+
     bool palmCascadeLoaded = false;
-    
+
     for (const QString& path : possiblePaths) {
         qDebug() << "Trying to load cascade from:" << path;
-        palmCascadeLoaded = palmCascade.load(path.toStdString());
-        if (palmCascadeLoaded) {
+        if (palmCascade.load(path.toStdString())) {
             qDebug() << "Successfully loaded cascade from:" << path;
+            palmCascadeLoaded = true;
             break;
         }
     }
-    
+
     if (!palmCascadeLoaded) {
         qDebug() << "Failed to load any cascade file after trying all possible paths";
         return false;
     }
-    
+
     // Initialize FLANN components
     featureDetector = cv::ORB::create();
     descriptorExtractor = cv::ORB::create();
     flannMatcher = cv::FlannBasedMatcher::create();
-    
+
     return true;
 }
 
@@ -122,34 +123,34 @@ void CalibrationWindow::updateFrame() {
     if (calibrationComplete) {
         cv::rectangle(currentFrame, calibratedPalmRegion, cv::Scalar(0, 0, 255), 2);
         for (const auto& kp : calibrationKeypoints) {
-            cv::circle(currentFrame, 
-                       cv::Point(kp.pt.x + calibratedPalmRegion.x, kp.pt.y + calibratedPalmRegion.y), 
+            cv::circle(currentFrame,
+                       cv::Point(kp.pt.x + calibratedPalmRegion.x, kp.pt.y + calibratedPalmRegion.y),
                        3, cv::Scalar(255, 0, 0), -1);
         }
     }
 
     // Convert cv::Mat to QImage and display it
     QImage image = matToQImage(currentFrame);
-    videoLabel->setPixmap(QPixmap::fromImage(image).scaled(videoLabel->size(), 
-                                                         Qt::KeepAspectRatio, 
-                                                         Qt::SmoothTransformation));
+    videoLabel->setPixmap(QPixmap::fromImage(image).scaled(videoLabel->size(),
+                                                           Qt::KeepAspectRatio,
+                                                           Qt::SmoothTransformation));
 }
 
 void CalibrationWindow::startCalibration() {
     // Prompt the user to place their palm
-    QMessageBox::information(this, "Palm Calibration", 
-                          "Place your palm in the green box and hold steady.");
+    QMessageBox::information(this, "Palm Calibration",
+                             "Place your palm in the green box and hold steady.");
 
     // Detect palm in current frame
     if (detectPalm()) {
         extractFeatures();
         calibrationComplete = true;
         finishButton->setEnabled(true);
-        QMessageBox::information(this, "Calibration Complete", 
-                              "Palm calibration successful! You can now finish calibration.");
+        QMessageBox::information(this, "Calibration Complete",
+                                 "Palm calibration successful! You can now finish calibration.");
     } else {
-        QMessageBox::warning(this, "Calibration Failed", 
-                          "Failed to detect palm. Please try again.");
+        QMessageBox::warning(this, "Calibration Failed",
+                             "Failed to detect palm. Please try again.");
     }
 }
 
@@ -158,8 +159,8 @@ void CalibrationWindow::finishCalibration() {
         emit calibrationFinished(true);
         accept(); // Close the dialog with acceptance
     } else {
-        QMessageBox::warning(this, "Calibration Required", 
-                          "Please complete palm calibration first.");
+        QMessageBox::warning(this, "Calibration Required",
+                             "Please complete palm calibration first.");
     }
 }
 
@@ -167,20 +168,31 @@ bool CalibrationWindow::detectPalm() {
     // Convert to grayscale
     cv::Mat grayFrame;
     cv::cvtColor(currentFrame, grayFrame, cv::COLOR_BGR2GRAY);
-    
+
     // Detect palms
     std::vector<cv::Rect> palms;
-    palmCascade.detectMultiScale(grayFrame, palms, 1.1, 3, 0, cv::Size(30, 30));
-    
+
+    if (palmCascade.empty()) {
+        qDebug() << "Error: palm cascade classifier is empty!";
+        return false;
+    }
+
+    try {
+        palmCascade.detectMultiScale(grayFrame, palms, 1.1, 3, 0, cv::Size(30, 30));
+    } catch (const cv::Exception& e) {
+        qDebug() << "OpenCV exception in detectMultiScale:" << e.what();
+        return false;
+    }
+
     if (palms.empty()) {
         qDebug() << "No palm detected during calibration";
         return false;
     }
-    
+
     // Use the largest detected palm region
-    calibratedPalmRegion = *std::max_element(palms.begin(), palms.end(), 
-        [](const cv::Rect& a, const cv::Rect& b) { return a.area() < b.area(); });
-    
+    calibratedPalmRegion = *std::max_element(palms.begin(), palms.end(),
+                                             [](const cv::Rect& a, const cv::Rect& b) { return a.area() < b.area(); });
+
     return true;
 }
 
@@ -188,10 +200,10 @@ void CalibrationWindow::extractFeatures() {
     // Convert to grayscale
     cv::Mat grayFrame;
     cv::cvtColor(currentFrame, grayFrame, cv::COLOR_BGR2GRAY);
-    
+
     // Extract region of interest (ROI)
     cv::Mat palmROI = grayFrame(calibratedPalmRegion);
-    
+
     // Extract keypoints and descriptors for tracking
     featureDetector->detect(palmROI, calibrationKeypoints);
     descriptorExtractor->compute(palmROI, calibrationKeypoints, calibrationDescriptors);
@@ -203,13 +215,13 @@ QImage CalibrationWindow::matToQImage(const cv::Mat &mat) {
         // BGR to RGB
         cv::Mat rgbMat;
         cv::cvtColor(mat, rgbMat, cv::COLOR_BGR2RGB);
-        return QImage((const uchar*)rgbMat.data, rgbMat.cols, rgbMat.rows, 
-                     rgbMat.step, QImage::Format_RGB888).copy();
+        return QImage((const uchar*)rgbMat.data, rgbMat.cols, rgbMat.rows,
+                      rgbMat.step, QImage::Format_RGB888).copy();
     } else if (mat.type() == CV_8UC1) {
         // Grayscale
-        return QImage((const uchar*)mat.data, mat.cols, mat.rows, 
-                     mat.step, QImage::Format_Grayscale8).copy();
+        return QImage((const uchar*)mat.data, mat.cols, mat.rows,
+                      mat.step, QImage::Format_Grayscale8).copy();
     }
-    
+
     return QImage();
 }

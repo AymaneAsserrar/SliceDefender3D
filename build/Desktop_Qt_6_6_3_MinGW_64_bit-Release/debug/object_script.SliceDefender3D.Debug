@@ -1,0 +1,14 @@
+debug/main.o
+debug/MainWindow.o
+debug/OpenGLWidget.o
+debug/WebcamHandler.o
+debug/Projectile.o
+debug/PalmDetection.o
+debug/CalibrationWindow.o
+debug/PalmTracker.o
+debug/qrc_resources.o
+debug/moc_MainWindow.o
+debug/moc_OpenGLWidget.o
+debug/moc_WebcamHandler.o
+debug/moc_CalibrationWindow.o
+debug/moc_PalmTracker.o

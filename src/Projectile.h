@@ -63,6 +63,11 @@ private:
     QVector3D m_rotationAxis;
     bool m_active;
     float m_scale;
+
+
+    // texture
+    QOpenGLTexture* m_texture;
+    bool m_hasTexture;
     
     // Reorder these declarations to match initialization order
     GLuint m_vao;
