@@ -72,8 +72,7 @@ bool CalibrationWindow::initializePalmDetection() {
                   << appDir + "/haarcascade_hand.xml"             // Fallback in build/exe dir
                   << appDir + "/../palm.xml"                      // One level up
                   << appDir + "/../haarcascade_hand.xml"          // Fallback one level up
-                  << "C:/Users/pc/Desktop/BDM project/BDM2/palm.xml"       // Absolute path to project root
-                  << "C:/Users/pc/Desktop/BDM project/BDM2/haarcascade_hand.xml"; // Fallback absolute path
+                  << "C:/Users/pc/slicedefender3d/palm.xml";       // Absolute path to project root
     
     // Try to find the cascade file in any of the possible locations
     bool palmCascadeLoaded = false;
