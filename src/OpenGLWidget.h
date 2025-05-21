@@ -29,7 +29,10 @@ public:
     bool calibratePalmDetection(const cv::Mat& frame);
     bool processPalmDetection(const cv::Mat& frame);
     
-    // Add camera control methods
+
+
+
+    //camera control methods
     void resetCamera();
 
 signals:
@@ -81,8 +84,10 @@ private:
     void drawSphere(float radius, int lats, int longs);
     void drawSword(); // Declaration of drawSword method
 
-
+    //texture
     QOpenGLTexture* bladeTexture = nullptr;
+    QOpenGLTexture* handleTexture = nullptr;
+
 
     // Calculate matrix data
     QMatrix4x4 projection;

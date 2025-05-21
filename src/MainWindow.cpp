@@ -22,11 +22,10 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new
     QWidget* rightWidget = new QWidget(this);
     rightWidget->setStyleSheet(
         "QWidget {"
-        "   background-image: url(:/images/wood_tile.jpg);"
         "   background-repeat: no-repeat;"
         "   background-position: center;"
         "   background-attachment: fixed;"
-        "   background-size: cover;"
+
         "}"
         );
 

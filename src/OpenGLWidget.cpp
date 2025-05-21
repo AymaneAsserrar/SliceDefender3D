@@ -73,6 +73,19 @@ void OpenGLWidget::initializeGL() {
 
     shaderProgram->link();
 
+
+    // Charger texture de la lame
+    bladeTexture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/blade2_texture.jpg").mirrored());
+    bladeTexture->setMinificationFilter(QOpenGLTexture::Linear);
+    bladeTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+    bladeTexture->setWrapMode(QOpenGLTexture::Repeat);
+
+    // Charger texture du manche
+    handleTexture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/handle_texture.png").mirrored());
+    handleTexture->setMinificationFilter(QOpenGLTexture::Linear);
+    handleTexture->setMagnificationFilter(QOpenGLTexture::Linear);
+    handleTexture->setWrapMode(QOpenGLTexture::Repeat);
+
     // Initialize vertex buffer object (VBO)
     vbo.create();
 
@@ -147,6 +160,7 @@ void OpenGLWidget::setHandPosition(const QVector3D& position) {
 }
 
 void OpenGLWidget::paintGL() {
+    // Clear écran avec couleur de fond gris foncé
     glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
@@ -156,71 +170,55 @@ void OpenGLWidget::paintGL() {
     view.lookAt(cameraPosition, QVector3D(0, 0, 0), QVector3D(0, 1, 0));
 
     shaderProgram->bind();
-    shaderProgram->setUniformValue("mvpMatrix", projection * view);
 
-    // Draw the spawning zone marker
-    drawSpawningZone();
-
-    QMatrix4x4 model;
-    QMatrix4x4 mvp = projection * view * model;
-
-    shaderProgram->bind();
-    shaderProgram->setUniformValue("mvpMatrix", mvp);
-
-    // Disable depth writing (but keep testing) for transparent objects
-    glDepthMask(GL_FALSE);
-
-    // Draw cylinder - move it closer to the camera and slightly lower
-    model.setToIdentity();
-    model.translate(0, -0.5f, 2.5f); // Move cylinder halfway toward camera and lower by 0.5 units
-    mvp = projection * view * model;
-    shaderProgram->setUniformValue("mvpMatrix", mvp);
-    shaderProgram->setUniformValue("color", QVector4D(0.2f, 0.7f, 1.0f, 0.4f)); // More transparent
-    drawCylinder();
-
-    // Re-enable depth writing for non-transparent objects
-    glDepthMask(GL_TRUE);
-
-    // Reset model matrix for other objects
-    model.setToIdentity();
-
-    // Draw hand marker
-    if (handSet) {
+    // Spawning zone (fond cylindre transparent)
+    {
+        QMatrix4x4 model;
         model.setToIdentity();
-
-        // Calculate rotation to point outward from cylinder center
-        float angle = atan2(handZ, handX) * 180.0f / M_PI;
-
-        // Position at hand location and adjust for the cylinder translation (including the Y offset)
-        model.translate(handX, handY - 0.5f, handZ + 2.5f);  // Add cylinder's z-translation and subtract y-offset
-
-        // Rotate to point outward from cylinder
-        model.rotate(angle, 0.0f, 1.0f, 0.0f);  // Y-axis rotation
-
-        // Remove the Z-axis rotation that was causing the sword to be horizontal
-        // The sword geometry is already defined to point up in Y direction
-
-        // Scale to appropriate size
-        model.scale(1.2f, 1.2f, 1.2f);  // Doubled from 0.6f to make sword twice as big
-
-        mvp = projection * view * model;
+        model.translate(0, -0.5f, 2.5f);
+        QMatrix4x4 mvp = projection * view * model;
         shaderProgram->setUniformValue("mvpMatrix", mvp);
-
-        drawSword();
+        shaderProgram->setUniformValue("useTexture", false);
+        shaderProgram->setUniformValue("color", QVector4D(0.2f, 0.7f, 1.0f, 0.4f));
+        glDepthMask(GL_FALSE);
+        drawCylinder();
+        glDepthMask(GL_TRUE);
     }
 
-    // Render all active projectiles - temporarily disable back-face culling
-    // to prevent faces from disappearing during rotation
-    glDisable(GL_CULL_FACE);
+    // Dessiner le sabre texturé (si défini)
+    if (handSet) {
+        QMatrix4x4 model;
+        model.setToIdentity();
+
+        float angle = atan2(handZ, handX) * 180.0f / M_PI;
+
+        model.translate(handX, handY - 0.5f, handZ + 2.5f);
+        model.rotate(angle, 0.0f, 1.0f, 0.0f);
+        model.scale(1.2f, 1.2f, 1.2f);
+
+        QMatrix4x4 mvp = projection * view * model;
+        shaderProgram->setUniformValue("mvpMatrix", mvp);
+
+        shaderProgram->setUniformValue("useTexture", true);
+        bladeTexture->bind();
+
+        drawSword();
+
+        bladeTexture->release();
+    }
+
+    // Dessiner tous les projectiles (en supposant qu'ils utilisent couleur unie)
+    glDisable(GL_CULL_FACE);  // Pour éviter la disparition de faces en rotation
 
     for (int i = 0; i < projectiles.size(); i++) {
+        shaderProgram->setUniformValue("useTexture", false);
+        shaderProgram->setUniformValue("color", QVector4D(1.0f, 0.0f, 0.0f, 1.0f)); // exemple couleur rouge pour fruit
         projectiles[i].render(shaderProgram, projection, view);
     }
 
-    // Re-enable back-face culling after drawing projectiles
     glEnable(GL_CULL_FACE);
 
-    // Add any pending projectiles (fragments from slicing)
+    // Ajout des projectiles en attente (fragments)
     if (!pendingProjectiles.isEmpty()) {
         projectiles.append(pendingProjectiles);
         pendingProjectiles.clear();
@@ -228,6 +226,7 @@ void OpenGLWidget::paintGL() {
 
     shaderProgram->release();
 }
+
 
 void OpenGLWidget::drawCylinder() {
     const int slices = 48;
@@ -408,166 +407,189 @@ void OpenGLWidget::drawSpawningZone() {
 }
 
 void OpenGLWidget::drawSword() {
-    // Sword dimensions
-    const float bladeLength = 0.25f;    // Blade length
-    const float bladeWidth = 0.06f;     // Blade width
-    const float handleLength = 0.15f;   // Handle length
-    const float handleWidth = 0.03f;    // Handle width
-    const float guardWidth = 0.1f;      // Guard width
-    const float guardHeight = 0.02f;    // Guard height
-    const float thickness = 0.03f;      // Increased thickness for 3D look
+    // Dimensions
+    const float bladeLength = 0.55f;
+    const float bladeWidth = 0.07f;
+    const float handleLength = 0.25f;
+    const float handleWidth = 0.05f;
+    const float guardWidth = 0.1f;
+    const float guardHeight = 0.02f;
+    const float thickness = 0.03f;
 
-    QVector<QVector3D> vertices;
+    struct VertexData {
+        QVector3D position;
+        QVector2D texCoord;
+    };
+    QVector<VertexData> vertices;
 
-    // BLADE
-    // Front face (triangular)
-    vertices.append(QVector3D(-bladeWidth/2, 0, thickness/2));        // Bottom left
-    vertices.append(QVector3D(bladeWidth/2, 0, thickness/2));         // Bottom right
-    vertices.append(QVector3D(0, bladeLength, thickness/2));          // Top point
+    // === LAME ===
+    // Front face (triangle)
+    vertices.append({QVector3D(-bladeWidth/2, 0, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(bladeWidth/2, 0, thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(0, bladeLength, thickness/2), QVector2D(0.5f, 1.0f)});
 
-    // Back face (triangular)
-    vertices.append(QVector3D(bladeWidth/2, 0, -thickness/2));        // Bottom right
-    vertices.append(QVector3D(-bladeWidth/2, 0, -thickness/2));       // Bottom left
-    vertices.append(QVector3D(0, bladeLength, -thickness/2));         // Top point
+    // Back face (triangle)
+    vertices.append({QVector3D(bladeWidth/2, 0, -thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(-bladeWidth/2, 0, -thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(0, bladeLength, -thickness/2), QVector2D(0.5f, 1.0f)});
 
-    // Left side face
-    vertices.append(QVector3D(-bladeWidth/2, 0, thickness/2));        // Front bottom
-    vertices.append(QVector3D(0, bladeLength, thickness/2));          // Front top
-    vertices.append(QVector3D(0, bladeLength, -thickness/2));         // Back top
+    // Left side face (rectangle = 2 triangles)
+    vertices.append({QVector3D(-bladeWidth/2, 0, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(0, bladeLength, thickness/2), QVector2D(0.5f, 1.0f)});
+    vertices.append({QVector3D(0, bladeLength, -thickness/2), QVector2D(0.5f, 1.0f)});
 
-    vertices.append(QVector3D(0, bladeLength, -thickness/2));         // Back top
-    vertices.append(QVector3D(-bladeWidth/2, 0, -thickness/2));       // Back bottom
-    vertices.append(QVector3D(-bladeWidth/2, 0, thickness/2));        // Front bottom
+    vertices.append({QVector3D(0, bladeLength, -thickness/2), QVector2D(0.5f, 1.0f)});
+    vertices.append({QVector3D(-bladeWidth/2, 0, -thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(-bladeWidth/2, 0, thickness/2), QVector2D(0.0f, 0.0f)});
 
-    // Right side face
-    vertices.append(QVector3D(bladeWidth/2, 0, thickness/2));         // Front bottom
-    vertices.append(QVector3D(0, bladeLength, -thickness/2));         // Back top
-    vertices.append(QVector3D(0, bladeLength, thickness/2));          // Front top
+    // Right side face (rectangle = 2 triangles)
+    vertices.append({QVector3D(bladeWidth/2, 0, thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(0, bladeLength, -thickness/2), QVector2D(0.5f, 1.0f)});
+    vertices.append({QVector3D(0, bladeLength, thickness/2), QVector2D(0.5f, 1.0f)});
 
-    vertices.append(QVector3D(0, bladeLength, -thickness/2));         // Back top
-    vertices.append(QVector3D(bladeWidth/2, 0, thickness/2));         // Front bottom
-    vertices.append(QVector3D(bladeWidth/2, 0, -thickness/2));        // Back bottom
+    vertices.append({QVector3D(0, bladeLength, -thickness/2), QVector2D(0.5f, 1.0f)});
+    vertices.append({QVector3D(bladeWidth/2, 0, thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(bladeWidth/2, 0, -thickness/2), QVector2D(1.0f, 0.0f)});
 
-    // Bottom edge
-    vertices.append(QVector3D(-bladeWidth/2, 0, thickness/2));        // Front left
-    vertices.append(QVector3D(-bladeWidth/2, 0, -thickness/2));       // Back left
-    vertices.append(QVector3D(bladeWidth/2, 0, -thickness/2));        // Back right
+    // Bottom edge (rectangle = 2 triangles)
+    vertices.append({QVector3D(-bladeWidth/2, 0, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(-bladeWidth/2, 0, -thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(bladeWidth/2, 0, -thickness/2), QVector2D(1.0f, 0.0f)});
 
-    vertices.append(QVector3D(bladeWidth/2, 0, -thickness/2));        // Back right
-    vertices.append(QVector3D(bladeWidth/2, 0, thickness/2));         // Front right
-    vertices.append(QVector3D(-bladeWidth/2, 0, thickness/2));        // Front left
+    vertices.append({QVector3D(bladeWidth/2, 0, -thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(bladeWidth/2, 0, thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(-bladeWidth/2, 0, thickness/2), QVector2D(0.0f, 0.0f)});
 
-    // CROSS-GUARD
+    const int bladeVertexCount = 24;
+
+    // === GARDE (Cross-guard) ===
+    // Couleur unie, pas de texture
     // Front face
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, thickness/2));  // Top left
-    vertices.append(QVector3D(guardWidth/2, -guardHeight, thickness/2));   // Top right
-    vertices.append(QVector3D(guardWidth/2, 0, thickness/2));             // Bottom right
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(guardWidth/2, -guardHeight, thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(guardWidth/2, 0, thickness/2), QVector2D(1.0f, 1.0f)});
 
-    vertices.append(QVector3D(guardWidth/2, 0, thickness/2));             // Bottom right
-    vertices.append(QVector3D(-guardWidth/2, 0, thickness/2));            // Bottom left
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, thickness/2)); // Top left
+    vertices.append({QVector3D(guardWidth/2, 0, thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(-guardWidth/2, 0, thickness/2), QVector2D(0.0f, 1.0f)});
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
 
     // Back face
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, -thickness/2));  // Top left
-    vertices.append(QVector3D(guardWidth/2, 0, -thickness/2));              // Bottom right
-    vertices.append(QVector3D(guardWidth/2, -guardHeight, -thickness/2));   // Top right
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, -thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(guardWidth/2, 0, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(guardWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 0.0f)});
 
-    vertices.append(QVector3D(guardWidth/2, 0, -thickness/2));              // Bottom right
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, -thickness/2));  // Top left
-    vertices.append(QVector3D(-guardWidth/2, 0, -thickness/2));             // Bottom left
+    vertices.append({QVector3D(guardWidth/2, 0, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, -thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(-guardWidth/2, 0, -thickness/2), QVector2D(0.0f, 1.0f)});
 
     // Top edge
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, thickness/2));   // Front left
-    vertices.append(QVector3D(guardWidth/2, -guardHeight, thickness/2));    // Front right
-    vertices.append(QVector3D(guardWidth/2, -guardHeight, -thickness/2));   // Back right
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(guardWidth/2, -guardHeight, thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(guardWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 1.0f)});
 
-    vertices.append(QVector3D(guardWidth/2, -guardHeight, -thickness/2));   // Back right
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, -thickness/2));  // Back left
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, thickness/2));   // Front left
+    vertices.append({QVector3D(guardWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, -thickness/2), QVector2D(0.0f, 1.0f)});
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
 
     // Left edge
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, thickness/2));   // Top front
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, -thickness/2));  // Top back
-    vertices.append(QVector3D(-guardWidth/2, 0, -thickness/2));             // Bottom back
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(-guardWidth/2, 0, -thickness/2), QVector2D(1.0f, 1.0f)});
 
-    vertices.append(QVector3D(-guardWidth/2, 0, -thickness/2));             // Bottom back
-    vertices.append(QVector3D(-guardWidth/2, 0, thickness/2));              // Bottom front
-    vertices.append(QVector3D(-guardWidth/2, -guardHeight, thickness/2));   // Top front
+    vertices.append({QVector3D(-guardWidth/2, 0, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(-guardWidth/2, 0, thickness/2), QVector2D(0.0f, 1.0f)});
+    vertices.append({QVector3D(-guardWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
 
     // Right edge
-    vertices.append(QVector3D(guardWidth/2, -guardHeight, thickness/2));    // Top front
-    vertices.append(QVector3D(guardWidth/2, 0, -thickness/2));              // Bottom back
-    vertices.append(QVector3D(guardWidth/2, -guardHeight, -thickness/2));   // Top back
+    vertices.append({QVector3D(guardWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(guardWidth/2, 0, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(guardWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 0.0f)});
 
-    vertices.append(QVector3D(guardWidth/2, 0, -thickness/2));              // Bottom back
-    vertices.append(QVector3D(guardWidth/2, -guardHeight, thickness/2));    // Top front
-    vertices.append(QVector3D(guardWidth/2, 0, thickness/2));               // Bottom front
+    vertices.append({QVector3D(guardWidth/2, 0, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(guardWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(guardWidth/2, 0, thickness/2), QVector2D(0.0f, 1.0f)});
 
-    // HANDLE
+    const int guardVertexCount = 30;
+
+    // === MANCHE ===
     // Front face
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, thickness/2));  // Bottom left
-    vertices.append(QVector3D(handleWidth/2, -handleLength-guardHeight, thickness/2));   // Bottom right
-    vertices.append(QVector3D(handleWidth/2, -guardHeight, thickness/2));               // Top right
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(handleWidth/2, -guardHeight, thickness/2), QVector2D(1.0f, 1.0f)});
 
-    vertices.append(QVector3D(handleWidth/2, -guardHeight, thickness/2));               // Top right
-    vertices.append(QVector3D(-handleWidth/2, -guardHeight, thickness/2));              // Top left
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, thickness/2)); // Bottom left
+    vertices.append({QVector3D(handleWidth/2, -guardHeight, thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 1.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
 
     // Back face
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, -thickness/2)); // Bottom left
-    vertices.append(QVector3D(handleWidth/2, -guardHeight, -thickness/2));               // Top right
-    vertices.append(QVector3D(handleWidth/2, -handleLength-guardHeight, -thickness/2));  // Bottom right
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, -thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(handleWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(handleWidth/2, -handleLength - guardHeight, -thickness/2), QVector2D(1.0f, 0.0f)});
 
-    vertices.append(QVector3D(handleWidth/2, -guardHeight, -thickness/2));               // Top right
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, -thickness/2)); // Bottom left
-    vertices.append(QVector3D(-handleWidth/2, -guardHeight, -thickness/2));              // Top left
+    vertices.append({QVector3D(handleWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, -thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -guardHeight, -thickness/2), QVector2D(0.0f, 1.0f)});
 
     // Bottom edge
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, thickness/2));  // Front left
-    vertices.append(QVector3D(handleWidth/2, -handleLength-guardHeight, thickness/2));   // Front right
-    vertices.append(QVector3D(handleWidth/2, -handleLength-guardHeight, -thickness/2));  // Back right
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(handleWidth/2, -handleLength - guardHeight, -thickness/2), QVector2D(1.0f, 0.0f)});
 
-    vertices.append(QVector3D(handleWidth/2, -handleLength-guardHeight, -thickness/2));  // Back right
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, -thickness/2)); // Back left
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, thickness/2));  // Front left
+    vertices.append({QVector3D(handleWidth/2, -handleLength - guardHeight, -thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, -thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
 
     // Left edge
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, thickness/2));  // Bottom front
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, -thickness/2)); // Bottom back
-    vertices.append(QVector3D(-handleWidth/2, -guardHeight, -thickness/2));              // Top back
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, -thickness/2), QVector2D(1.0f, 0.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 1.0f)});
 
-    vertices.append(QVector3D(-handleWidth/2, -guardHeight, -thickness/2));              // Top back
-    vertices.append(QVector3D(-handleWidth/2, -guardHeight, thickness/2));               // Top front
-    vertices.append(QVector3D(-handleWidth/2, -handleLength-guardHeight, thickness/2));  // Bottom front
+    vertices.append({QVector3D(-handleWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 1.0f)});
+    vertices.append({QVector3D(-handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
 
     // Right edge
-    vertices.append(QVector3D(handleWidth/2, -handleLength-guardHeight, thickness/2));   // Bottom front
-    vertices.append(QVector3D(handleWidth/2, -guardHeight, -thickness/2));               // Top back
-    vertices.append(QVector3D(handleWidth/2, -handleLength-guardHeight, -thickness/2));  // Bottom back
+    vertices.append({QVector3D(handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(handleWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(handleWidth/2, -handleLength - guardHeight, -thickness/2), QVector2D(1.0f, 0.0f)});
 
-    vertices.append(QVector3D(handleWidth/2, -guardHeight, -thickness/2));               // Top back
-    vertices.append(QVector3D(handleWidth/2, -handleLength-guardHeight, thickness/2));   // Bottom front
-    vertices.append(QVector3D(handleWidth/2, -guardHeight, thickness/2));                // Top front
+    vertices.append({QVector3D(handleWidth/2, -guardHeight, -thickness/2), QVector2D(1.0f, 1.0f)});
+    vertices.append({QVector3D(handleWidth/2, -handleLength - guardHeight, thickness/2), QVector2D(0.0f, 0.0f)});
+    vertices.append({QVector3D(handleWidth/2, -guardHeight, thickness/2), QVector2D(0.0f, 1.0f)});
+
+    const int handleVertexCount = 30;
 
     // Upload vertices to VBO
     vbo.bind();
-    vbo.allocate(vertices.constData(), vertices.size() * sizeof(QVector3D));
+    vbo.allocate(vertices.constData(), vertices.size() * sizeof(VertexData));
 
-    // Draw the blade (metallic gray)
-    glEnableVertexAttribArray(0);
-    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
-    shaderProgram->setUniformValue("color", QVector4D(0.8f, 0.8f, 0.9f, 1.0f));  // Metallic color
-    glDrawArrays(GL_TRIANGLES, 0, 24);  // Draw blade (increased number of faces)
+    // Enable vertex attributes
+    glEnableVertexAttribArray(0); // position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, sizeof(VertexData), nullptr);
 
-    // Draw the cross-guard (gold/yellow)
-    shaderProgram->setUniformValue("color", QVector4D(0.9f, 0.8f, 0.2f, 1.0f));  // Gold color
-    glDrawArrays(GL_TRIANGLES, 24, 30); // Draw guard (increased number of faces)
+    glEnableVertexAttribArray(2); // texCoord
+    glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, sizeof(VertexData), reinterpret_cast<void*>(offsetof(VertexData, texCoord)));
 
-    // Draw the handle (wooden brown)
-    shaderProgram->setUniformValue("color", QVector4D(0.6f, 0.3f, 0.1f, 1.0f));  // Brown color
-    glDrawArrays(GL_TRIANGLES, 54, 30); // Draw handle (increased number of faces)
+    // Draw blade with blade texture
+    bladeTexture->bind();
+    shaderProgram->setUniformValue("useTexture", true);
+    glDrawArrays(GL_TRIANGLES, 0, bladeVertexCount);
+    bladeTexture->release();
 
+    // Draw guard with solid color (no texture)
+    shaderProgram->setUniformValue("useTexture", false);
+    shaderProgram->setUniformValue("color", QVector4D(0.9f, 0.8f, 0.2f, 1.0f));  // Gold
+    glDrawArrays(GL_TRIANGLES, bladeVertexCount, guardVertexCount);
+
+    // Draw handle with handle texture
+    handleTexture->bind();
+    shaderProgram->setUniformValue("useTexture", true);
+    glDrawArrays(GL_TRIANGLES, bladeVertexCount + guardVertexCount, handleVertexCount);
+    handleTexture->release();
+
+    // Disable vertex attributes and release VBO
     glDisableVertexAttribArray(0);
+    glDisableVertexAttribArray(2);
     vbo.release();
 }
 

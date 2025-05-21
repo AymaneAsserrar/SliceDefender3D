@@ -2,6 +2,7 @@ QT += core gui widgets openglwidgets concurrent
 
 CONFIG += c++17
 SOURCES += \
+    src/StrartMenuWidget.cpp \
     src/main.cpp \
     src/MainWindow.cpp \
     src/OpenGLWidget.cpp \
@@ -14,6 +15,7 @@ SOURCES += \
 HEADERS += \
     src/MainWindow.h \
     src/OpenGLWidget.h \
+    src/StartMenuWidget.h \
     src/WebcamHandler.h \
     src/Projectile.h \
     src/CalibrationWindow.h \

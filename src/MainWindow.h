@@ -6,6 +6,7 @@
 class WebcamHandler;
 class OpenGLWidget;
 
+
 class MainWindow : public QMainWindow {
     Q_OBJECT
 
@@ -38,7 +39,7 @@ private:
     int score = 0;
     int elapsedTime = 0;
     QTimer *gameTimer;
-    
+
     // Game duration in seconds (2 minutes)
     const int gameDuration = 120;
 };

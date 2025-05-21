@@ -1,3 +1,4 @@
+release/StrartMenuWidget.o
 release/main.o
 release/MainWindow.o
 release/OpenGLWidget.o
@@ -9,6 +10,7 @@ release/PalmTracker.o
 release/qrc_resources.o
 release/moc_MainWindow.o
 release/moc_OpenGLWidget.o
+release/moc_StartMenuWidget.o
 release/moc_WebcamHandler.o
 release/moc_CalibrationWindow.o
 release/moc_PalmTracker.o

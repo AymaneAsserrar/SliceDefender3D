@@ -9,5 +9,8 @@
         <file>resources/images/banana3_texture.jpg</file>
         <file>resources/images/banana4_texture.jpg</file>
         <file>resources/images/wood_texture.jpeg</file>
+        <file>resources/images/handle_texture.png</file>
+        <file>resources/images/blade2_texture.jpg</file>
+        <file>resources/images/blade3_texture.png</file>
     </qresource>
 </RCC>
