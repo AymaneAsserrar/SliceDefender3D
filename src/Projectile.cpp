@@ -115,23 +115,34 @@ void Projectile::update(float deltaTime) {
     }
 }
 
-void Projectile::render(QOpenGLShaderProgram* shaderProgram, const QMatrix4x4& projection, const QMatrix4x4& view) {
+void Projectile::render(QOpenGLShaderProgram* shaderProgram,
+                        const QMatrix4x4& projection,
+                        const QMatrix4x4& view,
+                        const QVector3D& cameraPosition) {
     if (!m_active || !m_initialized) return;
 
-    // Désactiver la texture par défaut
-    shaderProgram->setUniformValue("useTexture", false);
-    glBindTexture(GL_TEXTURE_2D, 0);
-
-    // Matrice modèle
+    // Calcul de la matrice modèle
     QMatrix4x4 model;
     model.translate(m_position);
     model.rotate(m_rotationAngle, m_rotationAxis);
     model.scale(m_scale);
 
-    // Uniformes de base
-    shaderProgram->setUniformValue("mvpMatrix", projection * view * model);
+    // Passage des matrices au shader
     shaderProgram->setUniformValue("modelMatrix", model);
+    shaderProgram->setUniformValue("viewMatrix", view);
+    shaderProgram->setUniformValue("projectionMatrix", projection);
+
+    // Matrice normale pour éclairage correct des normales
     shaderProgram->setUniformValue("normalMatrix", model.normalMatrix());
+
+    // Position et couleur de la lumière (lampadaire en haut de la scène)
+    QVector3D lightPos(0.0f, 5.0f, 0.0f);
+    QVector3D lightColor(1.0f, 1.0f, 1.0f);
+
+    // Position de la caméra (vue) pour calcul de l’éclairage spéculaire
+    shaderProgram->setUniformValue("lightPos", lightPos);
+    shaderProgram->setUniformValue("viewPos", cameraPosition);
+    shaderProgram->setUniformValue("lightColor", lightColor);
 
     // Couleur selon le type et si c’est un fragment
     QVector4D color;
@@ -146,16 +157,17 @@ void Projectile::render(QOpenGLShaderProgram* shaderProgram, const QMatrix4x4& p
         color = m_isFragment ? QVector4D(0.98f, 0.93f, 0.7f, 1.0f) : QVector4D(0.9f, 0.7f, 0.1f, 1.0f);
         break;
     case Type::FRAISE:
+        // Fraise a texture spécifique, donc rendu spécial
         shaderProgram->setUniformValue("useTexture", true);
-        renderFraise(shaderProgram);
+        renderFraise(shaderProgram, model, view, projection, lightPos, cameraPosition, lightColor);
         shaderProgram->setUniformValue("useTexture", false);
         glBindTexture(GL_TEXTURE_2D, 0);
-        break;
-
+        return; // On sort ici car rendu complet dans renderFraise()
     }
+
     shaderProgram->setUniformValue("color", color);
 
-    // Si c’est un fragment, on passe des infos en plus pour le rendu du plan de coupe
+    // Informations pour le rendu des fragments (coupures)
     if (m_isFragment) {
         shaderProgram->setUniformValue("isFragment", true);
         shaderProgram->setUniformValue("sliceNormal", m_sliceNormal);
@@ -164,34 +176,30 @@ void Projectile::render(QOpenGLShaderProgram* shaderProgram, const QMatrix4x4& p
         shaderProgram->setUniformValue("isFragment", false);
     }
 
-    // Rendu selon le type de fruit
+    // Rendu selon le type
     switch (m_type) {
     case Type::BANANA:
         shaderProgram->setUniformValue("useTexture", true);
-        renderBanana(shaderProgram);
+        renderBanana(shaderProgram, model, view, projection, lightPos, cameraPosition, lightColor);
         shaderProgram->setUniformValue("useTexture", false);
         glBindTexture(GL_TEXTURE_2D, 0);
         break;
     case Type::APPLE:
         shaderProgram->setUniformValue("useTexture", true);
-        renderApple(shaderProgram);
+        renderApple(shaderProgram, model, view, projection, lightPos, cameraPosition, lightColor);
         shaderProgram->setUniformValue("useTexture", false);
         glBindTexture(GL_TEXTURE_2D, 0);
         break;
     case Type::ANANAS:
         shaderProgram->setUniformValue("useTexture", false);
-        renderAnanas(shaderProgram);
+        renderAnanas(shaderProgram, model, view, projection, lightPos, cameraPosition, lightColor);
         break;
-
     case Type::FRAISE:
-        shaderProgram->setUniformValue("useTexture", true);
-        renderFraise(shaderProgram);
-        shaderProgram->setUniformValue("useTexture", false);
-        glBindTexture(GL_TEXTURE_2D, 0);
+        // Cas déjà traité plus haut (early return)
         break;
-
     }
 }
+
 
 
 
@@ -425,7 +433,14 @@ void Projectile::applyFragmentCutPlane(std::vector<GLfloat>& vertices, std::vect
 }
 
 // Update rendering methods to handle fragments
-void Projectile::renderBanana(QOpenGLShaderProgram* shaderProgram) {
+void Projectile::renderBanana(QOpenGLShaderProgram* shaderProgram,
+                              const QMatrix4x4& model,
+                              const QMatrix4x4& view,
+                              const QMatrix4x4& projection,
+                              const QVector3D& lightPos,
+                              const QVector3D& viewPos,
+                              const QVector3D& lightColor)
+{
     const int segments = 12;
     const float baseRadius = 0.08f;
     const float length = 0.7f;
@@ -520,11 +535,19 @@ void Projectile::renderBanana(QOpenGLShaderProgram* shaderProgram) {
     this->glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float))); // Texture
     this->glEnableVertexAttribArray(2);
 
-    // Texture ?
+    // Passer les matrices et la lumière au shader
+    shaderProgram->setUniformValue("modelMatrix", model);
+    shaderProgram->setUniformValue("viewMatrix", view);
+    shaderProgram->setUniformValue("projectionMatrix", projection);
+    shaderProgram->setUniformValue("lightPos", lightPos);
+    shaderProgram->setUniformValue("viewPos", viewPos);
+    shaderProgram->setUniformValue("lightColor", lightColor);
+
+    // Texture
     if (m_hasTexture && m_texture) {
         shaderProgram->setUniformValue("useTexture", true);
         m_texture->bind(0);
-        shaderProgram->setUniformValue("appleTexture", 0); // Uniform identique à celui utilisé pour la pomme
+        shaderProgram->setUniformValue("appleTexture", 0); // Même uniform que pomme
     } else {
         shaderProgram->setUniformValue("useTexture", false);
     }
@@ -539,7 +562,15 @@ void Projectile::renderBanana(QOpenGLShaderProgram* shaderProgram) {
 }
 
 
-void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
+
+void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram,
+                             const QMatrix4x4& model,
+                             const QMatrix4x4& view,
+                             const QMatrix4x4& projection,
+                             const QVector3D& lightPos,
+                             const QVector3D& viewPos,
+                             const QVector3D& lightColor)
+{
     const int stacks = 24;
     const int slices = 36;
     const float radius = 0.45f;
@@ -610,39 +641,33 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
     }
 
     // --- Génération des 2 feuilles planes ---
-    // Position de la base des feuilles : légèrement au-dessus du sommet de la pomme
     const float crownY = radius * heightFactor + 0.02f;
     const float leafSize = 0.2f;
 
-    // Feuille 1 (plan simple, 2 triangles formant un rectangle)
-    // Sommets : 4 points (x,y,z), normales simples vers le haut (0,1,0)
     verticesLeaves.insert(verticesLeaves.end(), {
                                                     -leafSize, crownY, 0.0f,    0, 1, 0,   0.0f, 0.0f,  // bas-gauche
-                                                    leafSize, crownY, 0.0f,    0, 1, 0,   1.0f, 0.0f,  // bas-droite
+                                                    leafSize, crownY, 0.0f,     0, 1, 0,   1.0f, 0.0f,  // bas-droite
                                                     -leafSize, crownY + leafSize * 0.6f, 0.0f, 0, 1, 0,  0.0f, 1.0f,  // haut-gauche
-                                                    leafSize, crownY + leafSize * 0.6f, 0.0f, 0, 1, 0,  1.0f, 1.0f   // haut-droite
+                                                    leafSize, crownY + leafSize * 0.6f, 0.0f,  0, 1, 0,  1.0f, 1.0f   // haut-droite
                                                 });
     indicesLeaves.insert(indicesLeaves.end(), {
                                                   0, 1, 2,
                                                   1, 3, 2
                                               });
 
-    // Feuille 2 (même forme, pivotée de 45° autour de Y)
-    // On applique une rotation manuelle sur X,Z
-    auto rotateY45 = [](float x, float z) -> std::pair<float,float> {
-        float angle = M_PI / 4.0f; // 45°
+    auto rotateY45 = [](float x, float z) -> std::pair<float, float> {
+        float angle = M_PI / 4.0f;
         float cosA = std::cos(angle);
         float sinA = std::sin(angle);
         return { x * cosA - z * sinA, x * sinA + z * cosA };
     };
 
-    size_t baseIndex = verticesLeaves.size() / 8; // base des sommets suivants
+    size_t baseIndex = verticesLeaves.size() / 8;
 
-    // sommets feuille 2 avant rotation (x,z)
     float xBL = -leafSize, zBL = 0.0f;
-    float xBR = leafSize,  zBR = 0.0f;
+    float xBR = leafSize, zBR = 0.0f;
     float xTL = -leafSize, zTL = 0.0f;
-    float xTR = leafSize,  zTR = 0.0f;
+    float xTR = leafSize, zTR = 0.0f;
     float yBase = crownY;
     float yTop = crownY + leafSize * 0.6f;
 
@@ -652,10 +677,10 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
     auto [xTRr, zTRr] = rotateY45(xTR, zTR);
 
     verticesLeaves.insert(verticesLeaves.end(), {
-                                                    xBLr, yBase, zBLr,    0,1,0,   0.0f, 0.0f,
-                                                    xBRr, yBase, zBRr,    0,1,0,   1.0f, 0.0f,
-                                                    xTLr, yTop,  zTLr,    0,1,0,   0.0f, 1.0f,
-                                                    xTRr, yTop,  zTRr,    0,1,0,   1.0f, 1.0f,
+                                                    xBLr, yBase, zBLr,    0, 1, 0,   0.0f, 0.0f,
+                                                    xBRr, yBase, zBRr,    0, 1, 0,   1.0f, 0.0f,
+                                                    xTLr, yTop, zTLr,     0, 1, 0,   0.0f, 1.0f,
+                                                    xTRr, yTop, zTRr,     0, 1, 0,   1.0f, 1.0f,
                                                 });
 
     indicesLeaves.insert(indicesLeaves.end(), {
@@ -663,28 +688,35 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
                                                   (GLuint)(baseIndex + 1), (GLuint)(baseIndex + 3), (GLuint)(baseIndex + 2)
                                               });
 
-    // --- Upload / Draw ---
-
     if (m_isFragment)
         applyFragmentCutPlane(verticesBody, indicesBody);
 
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(m_vao);
 
-    // Corps pomme (texture)
+    // Upload données corps pomme
     this->glBindBuffer(GL_ARRAY_BUFFER, m_vbo);
     this->glBufferData(GL_ARRAY_BUFFER, verticesBody.size() * sizeof(GLfloat), verticesBody.data(), GL_STATIC_DRAW);
 
     this->glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, m_ebo);
     this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesBody.size() * sizeof(GLuint), indicesBody.data(), GL_STATIC_DRAW);
 
-    this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);
+    // Attributs
+    this->glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)0);  // position
     this->glEnableVertexAttribArray(0);
 
-    this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));
+    this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(3 * sizeof(float)));  // normale
     this->glEnableVertexAttribArray(1);
 
-    this->glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
+    this->glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));  // texture
     this->glEnableVertexAttribArray(2);
+
+    // Uniformes d’éclairage et position caméra
+    shaderProgram->setUniformValue("modelMatrix", model);
+    shaderProgram->setUniformValue("viewMatrix", view);
+    shaderProgram->setUniformValue("projectionMatrix", projection);
+    shaderProgram->setUniformValue("lightPos", lightPos);
+    shaderProgram->setUniformValue("viewPos", viewPos);
+    shaderProgram->setUniformValue("lightColor", lightColor);
 
     if (m_hasTexture && m_texture) {
         shaderProgram->setUniformValue("useTexture", true);
@@ -694,6 +726,7 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
         shaderProgram->setUniformValue("useTexture", false);
     }
 
+    // Dessiner corps pomme
     this->glDrawElements(GL_TRIANGLES, indicesBody.size(), GL_UNSIGNED_INT, 0);
 
     if (m_hasTexture && m_texture) {
@@ -701,20 +734,28 @@ void Projectile::renderApple(QOpenGLShaderProgram* shaderProgram) {
         glBindTexture(GL_TEXTURE_2D, 0);
     }
 
-    // Feuilles (couleur verte, sans texture)
+    // Upload données feuilles
     this->glBufferData(GL_ARRAY_BUFFER, verticesLeaves.size() * sizeof(GLfloat), verticesLeaves.data(), GL_STATIC_DRAW);
     this->glBufferData(GL_ELEMENT_ARRAY_BUFFER, indicesLeaves.size() * sizeof(GLuint), indicesLeaves.data(), GL_STATIC_DRAW);
 
     shaderProgram->setUniformValue("useTexture", false);
     shaderProgram->setUniformValue("color", QVector4D(0.0f, 0.4f, 0.0f, 1.0f)); // vert foncé
 
+    // Dessiner feuilles
     this->glDrawElements(GL_TRIANGLES, indicesLeaves.size(), GL_UNSIGNED_INT, 0);
 
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
 }
 
 
-void Projectile::renderAnanas(QOpenGLShaderProgram* shaderProgram) {
+void Projectile::renderAnanas(QOpenGLShaderProgram* shaderProgram,
+                              const QMatrix4x4& model,
+                              const QMatrix4x4& view,
+                              const QMatrix4x4& projection,
+                              const QVector3D& lightPos,
+                              const QVector3D& viewPos,
+                              const QVector3D& lightColor)
+{
     const int slices = 32;
     const int stacks = 16;
     const float bodyHeight = 0.8f;
@@ -887,33 +928,49 @@ void Projectile::renderAnanas(QOpenGLShaderProgram* shaderProgram) {
     this->glVertexAttribPointer(1, 3, GL_FLOAT, GL_FALSE, 6 * sizeof(float), (void*)(3 * sizeof(float)));
     this->glEnableVertexAttribArray(1);
 
-    // Dessiner le corps en jaune/orangé
+    // Ajout éclairage : matrices, lumière, caméra
+    shaderProgram->setUniformValue("modelMatrix", model);
+    shaderProgram->setUniformValue("viewMatrix", view);
+    shaderProgram->setUniformValue("projectionMatrix", projection);
+    shaderProgram->setUniformValue("lightPos", lightPos);
+    shaderProgram->setUniformValue("viewPos", viewPos);
+    shaderProgram->setUniformValue("lightColor", lightColor);
+
+    // Couleur ananas (orange-jaune)
+    shaderProgram->setUniformValue("useTexture", false);
+    shaderProgram->setUniformValue("color", QVector4D(0.85f, 0.65f, 0.25f, 1.0f));
+
     int bodyQuads = stacks * slices;
     int bodyIndexCount = bodyQuads * 6;
 
-
-    shaderProgram->setUniformValue("useTexture", false);
-    shaderProgram->setUniformValue("color", QVector4D(0.85f, 0.65f, 0.25f, 1.0f));  // Jaune-orange
     glDrawElements(GL_TRIANGLES, bodyIndexCount, GL_UNSIGNED_INT, 0);
 
-    // Dessiner la couronne en vert
+    // Indices couronne
     int crownIndexCount = indices.size() - bodyIndexCount;
     const void* crownIndicesOffset = (const void*)(bodyIndexCount * sizeof(GLuint));
 
-    shaderProgram->setUniformValue("color", QVector4D(0.05f, 0.3f, 0.05f, 1.0f));  // Vert foncé
+    // Couleur vert foncé pour la couronne
+    shaderProgram->setUniformValue("color", QVector4D(0.05f, 0.3f, 0.05f, 1.0f));
     glDrawElements(GL_TRIANGLES, crownIndexCount, GL_UNSIGNED_INT, crownIndicesOffset);
 
-    // Cleanup
     QOpenGLContext::currentContext()->extraFunctions()->glBindVertexArray(0);
 }
 
 
 
-void Projectile::renderFraise(QOpenGLShaderProgram* shaderProgram) {
+
+void Projectile::renderFraise(QOpenGLShaderProgram* shaderProgram,
+                              const QMatrix4x4& model,
+                              const QMatrix4x4& view,
+                              const QMatrix4x4& projection,
+                              const QVector3D& lightPos,
+                              const QVector3D& viewPos,
+                              const QVector3D& lightColor)
+{
     const int stacks = 24;
     const int slices = 36;
     const float radius = 0.32f;   // Corps un peu plus petit (au lieu de 0.35f)
-    const float height = 0.6f;   // Hauteur légèrement réduite
+    const float height = 0.6f;    // Hauteur légèrement réduite
 
     std::vector<GLfloat> verticesBody;
     std::vector<GLuint> indicesBody;
@@ -980,7 +1037,7 @@ void Projectile::renderFraise(QOpenGLShaderProgram* shaderProgram) {
         float x2 = leafRadius * std::cos(nextAngle);
         float z2 = leafRadius * std::sin(nextAngle);
 
-        float tipX = (leafRadius + 0.02f) * std::cos(angle + M_PI / leafCount);  // Un peu plus rapproché (au lieu de +0.03f)
+        float tipX = (leafRadius + 0.02f) * std::cos(angle + M_PI / leafCount);
         float tipZ = (leafRadius + 0.02f) * std::sin(angle + M_PI / leafCount);
         float tipY = crownY + leafHeight;
 
@@ -1047,6 +1104,14 @@ void Projectile::renderFraise(QOpenGLShaderProgram* shaderProgram) {
 
     this->glVertexAttribPointer(2, 2, GL_FLOAT, GL_FALSE, 8 * sizeof(float), (void*)(6 * sizeof(float)));
     this->glEnableVertexAttribArray(2);
+
+    // Ajout des matrices et de la lumière
+    shaderProgram->setUniformValue("modelMatrix", model);
+    shaderProgram->setUniformValue("viewMatrix", view);
+    shaderProgram->setUniformValue("projectionMatrix", projection);
+    shaderProgram->setUniformValue("lightPos", lightPos);
+    shaderProgram->setUniformValue("viewPos", viewPos);
+    shaderProgram->setUniformValue("lightColor", lightColor);
 
     if (m_hasTexture && m_texture) {
         shaderProgram->setUniformValue("useTexture", true);

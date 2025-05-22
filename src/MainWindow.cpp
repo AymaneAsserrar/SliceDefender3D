@@ -20,14 +20,16 @@ MainWindow::MainWindow(QWidget *parent) : QMainWindow(parent), webcamHandler(new
 
     // Right container widget with background image
     QWidget* rightWidget = new QWidget(this);
-    rightWidget->setStyleSheet(
-        "QWidget {"
-        "   background-repeat: no-repeat;"
-        "   background-position: center;"
-        "   background-attachment: fixed;"
+rightWidget->setStyleSheet(
+    "QWidget {"
+    "   background-image: url(:/new/prefix2/resources/images/smoothies_background.png);"
+    "   background-repeat: no-repeat;"
+    "   background-position: center;"
+    "   background-attachment: fixed;"
+    "}"
+);
 
-        "}"
-        );
+
 
     // Right: Vertical layout inside rightWidget
     QVBoxLayout* rightLayout = new QVBoxLayout(rightWidget);

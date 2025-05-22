@@ -13,7 +13,9 @@ OpenGLWidget::OpenGLWidget(QWidget *parent) : QOpenGLWidget(parent), shaderProgr
     setFocus();  // Request focus immediately
 }
 
+
 OpenGLWidget::~OpenGLWidget() {
+
     makeCurrent();
     vbo.destroy();
     delete shaderProgram;
@@ -23,80 +25,100 @@ OpenGLWidget::~OpenGLWidget() {
 void OpenGLWidget::initializeGL() {
     initializeOpenGLFunctions();
 
-    // Enable depth testing
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
 
-    // Enable blending for transparency
     glEnable(GL_BLEND);
     glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 
-    // Compile and link shaders with texture support
     shaderProgram = new QOpenGLShaderProgram(this);
 
-    // Vertex shader: position + normal + texCoord
+    // Vertex shader avec normales + calcul positions pour éclairage
     shaderProgram->addShaderFromSourceCode(QOpenGLShader::Vertex, R"(
         #version 330 core
         layout(location = 0) in vec3 position;
-        layout(location = 1) in vec3 normal;        // si tu utilises la normale (utile pour l'éclairage)
-        layout(location = 2) in vec2 texCoord;      // coordonnées texture
+        layout(location = 1) in vec3 normal;
+        layout(location = 2) in vec2 texCoord;
 
-        uniform mat4 mvpMatrix;
+        uniform mat4 modelMatrix;
+        uniform mat4 viewMatrix;
+        uniform mat4 projectionMatrix;
 
+        out vec3 fragPos;
+        out vec3 fragNormal;
         out vec2 vTexCoord;
 
         void main() {
-            gl_Position = mvpMatrix * vec4(position, 1.0);
+            vec4 worldPos = modelMatrix * vec4(position, 1.0);
+            fragPos = worldPos.xyz;
+            fragNormal = mat3(transpose(inverse(modelMatrix))) * normal;
             vTexCoord = texCoord;
+
+            gl_Position = projectionMatrix * viewMatrix * worldPos;
         }
     )");
 
-    // Fragment shader: couleur ou texture selon useTexture
+    // Fragment shader avec éclairage Phong simple + texture
     shaderProgram->addShaderFromSourceCode(QOpenGLShader::Fragment, R"(
         #version 330 core
+        in vec3 fragPos;
+        in vec3 fragNormal;
         in vec2 vTexCoord;
 
         out vec4 fragColor;
+
+        uniform vec3 lightPos;
+        uniform vec3 viewPos;
+        uniform vec3 lightColor;
 
         uniform vec4 color;
         uniform sampler2D appleTexture;
         uniform bool useTexture;
 
         void main() {
-            if (useTexture) {
-                fragColor = texture(appleTexture, vTexCoord);
-            } else {
-                fragColor = color;
-            }
+            vec3 norm = normalize(fragNormal);
+            vec3 lightDir = normalize(lightPos - fragPos);
+
+            // Ambiant
+            vec3 ambient = 0.4 * lightColor;
+
+            // Diffuse
+            float diff = max(dot(norm, lightDir), 0.0);
+            vec3 diffuse = diff * lightColor;
+
+            // Speculaire (Blinn-Phong)
+            vec3 viewDir = normalize(viewPos - fragPos);
+            vec3 halfwayDir = normalize(lightDir + viewDir);
+            float spec = pow(max(dot(norm, halfwayDir), 0.0), 32.0);
+            vec3 specular = spec * lightColor;
+
+            vec3 lighting = ambient + diffuse + specular;
+
+            vec4 baseColor = useTexture ? texture(appleTexture, vTexCoord) : color;
+
+            fragColor = vec4(baseColor.rgb * lighting, baseColor.a);
         }
     )");
 
     shaderProgram->link();
 
-
-    // Charger texture de la lame
+    // Charger textures lame et manche (inchangé)
     bladeTexture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/blade2_texture.jpg").mirrored());
     bladeTexture->setMinificationFilter(QOpenGLTexture::Linear);
     bladeTexture->setMagnificationFilter(QOpenGLTexture::Linear);
     bladeTexture->setWrapMode(QOpenGLTexture::Repeat);
 
-    // Charger texture du manche
     handleTexture = new QOpenGLTexture(QImage(":/new/prefix2/resources/images/handle_texture.png").mirrored());
     handleTexture->setMinificationFilter(QOpenGLTexture::Linear);
     handleTexture->setMagnificationFilter(QOpenGLTexture::Linear);
     handleTexture->setWrapMode(QOpenGLTexture::Repeat);
 
-    // Initialize vertex buffer object (VBO)
     vbo.create();
 
-    // Start the game timer
     elapsedTimer.start();
-    timerId = startTimer(16); // ~60 FPS
+    timerId = startTimer(16);
 
-    // Position knife at center of cylinder facing projectiles
     setHandPosition(0.5f, 0.5f);
-
-    // Initialize camera position
     resetCamera();
 }
 
@@ -160,32 +182,47 @@ void OpenGLWidget::setHandPosition(const QVector3D& position) {
 }
 
 void OpenGLWidget::paintGL() {
-    // Clear écran avec couleur de fond gris foncé
-    glClearColor(0.1f, 0.1f, 0.1f, 1.0f);
+
+    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+    // Configurer matrices projection et vue
     projection.setToIdentity();
     projection.perspective(45.0f, float(width()) / height(), 0.1f, 100.0f);
+
     view.setToIdentity();
     view.lookAt(cameraPosition, QVector3D(0, 0, 0), QVector3D(0, 1, 0));
 
     shaderProgram->bind();
 
-    // Spawning zone (fond cylindre transparent)
+    // Position et couleur de la lumière (statique, fixe au-dessus)
+    QVector3D lightPos(0.0f, 5.0f, 0.0f);
+    QVector3D lightColor(1.0f, 1.0f, 1.0f);
+
+    // Zone de spawn (fond cylindrique transparent)
     {
         QMatrix4x4 model;
         model.setToIdentity();
         model.translate(0, -0.5f, 2.5f);
-        QMatrix4x4 mvp = projection * view * model;
-        shaderProgram->setUniformValue("mvpMatrix", mvp);
+
+        shaderProgram->setUniformValue("mvpMatrix", projection * view * model);
+        shaderProgram->setUniformValue("modelMatrix", model);
+        shaderProgram->setUniformValue("viewMatrix", view);
+        shaderProgram->setUniformValue("projectionMatrix", projection);
+        shaderProgram->setUniformValue("lightPos", lightPos);
+        shaderProgram->setUniformValue("viewPos", cameraPosition);
+        shaderProgram->setUniformValue("lightColor", lightColor);
+
         shaderProgram->setUniformValue("useTexture", false);
         shaderProgram->setUniformValue("color", QVector4D(0.2f, 0.7f, 1.0f, 0.4f));
+
         glDepthMask(GL_FALSE);
         drawCylinder();
         glDepthMask(GL_TRUE);
     }
 
-    // Dessiner le sabre texturé (si défini)
+    // Dessiner le sabre texturé (avec éclairage)
     if (handSet) {
         QMatrix4x4 model;
         model.setToIdentity();
@@ -196,8 +233,13 @@ void OpenGLWidget::paintGL() {
         model.rotate(angle, 0.0f, 1.0f, 0.0f);
         model.scale(1.2f, 1.2f, 1.2f);
 
-        QMatrix4x4 mvp = projection * view * model;
-        shaderProgram->setUniformValue("mvpMatrix", mvp);
+        shaderProgram->setUniformValue("mvpMatrix", projection * view * model);
+        shaderProgram->setUniformValue("modelMatrix", model);
+        shaderProgram->setUniformValue("viewMatrix", view);
+        shaderProgram->setUniformValue("projectionMatrix", projection);
+        shaderProgram->setUniformValue("lightPos", lightPos);
+        shaderProgram->setUniformValue("viewPos", cameraPosition);
+        shaderProgram->setUniformValue("lightColor", lightColor);
 
         shaderProgram->setUniformValue("useTexture", true);
         bladeTexture->bind();
@@ -207,18 +249,19 @@ void OpenGLWidget::paintGL() {
         bladeTexture->release();
     }
 
-    // Dessiner tous les projectiles (en supposant qu'ils utilisent couleur unie)
-    glDisable(GL_CULL_FACE);  // Pour éviter la disparition de faces en rotation
+    // Dessiner tous les projectiles avec éclairage cohérent
+    glDisable(GL_CULL_FACE);  // Eviter disparition de faces en rotation
 
-    for (int i = 0; i < projectiles.size(); i++) {
-        shaderProgram->setUniformValue("useTexture", false);
-        shaderProgram->setUniformValue("color", QVector4D(1.0f, 0.0f, 0.0f, 1.0f)); // exemple couleur rouge pour fruit
-        projectiles[i].render(shaderProgram, projection, view);
+    for (int i = 0; i < projectiles.size(); ++i) {
+        if (!projectiles[i].isActive()) continue;
+
+        // Les projectiles doivent gérer leurs propres uniforms (matrices + éclairage)
+        projectiles[i].render(shaderProgram, projection, view, cameraPosition);
     }
 
     glEnable(GL_CULL_FACE);
 
-    // Ajout des projectiles en attente (fragments)
+    // Ajouter les projectiles en attente (fragments)
     if (!pendingProjectiles.isEmpty()) {
         projectiles.append(pendingProjectiles);
         pendingProjectiles.clear();
@@ -234,20 +277,20 @@ void OpenGLWidget::drawCylinder() {
     const float r = cylinderRadius;
     QVector<QVector3D> vertices;
 
-    // Bottom circle
+    // Cercle bas
     for (int i = 0; i < slices; ++i) {
         float theta = float(i) / slices * 2.0f * M_PI;
         vertices.append(QVector3D(r * std::cos(theta), -h / 2, r * std::sin(theta)));
     }
 
-    // Top circle
+    // Cercle haut
     for (int i = 0; i < slices; ++i) {
         float theta = float(i) / slices * 2.0f * M_PI;
         vertices.append(QVector3D(r * std::cos(theta), h / 2, r * std::sin(theta)));
     }
 
-    // Vertical lines to better visualize the cylinder surface
-    for (int i = 0; i < slices; i += 4) { // Draw fewer lines for clarity
+    // Lignes verticales pour visualiser la surface
+    for (int i = 0; i < slices; i += 4) { // Moins de lignes pour la clarté
         float theta = float(i) / slices * 2.0f * M_PI;
         float x = r * std::cos(theta);
         float z = r * std::sin(theta);
@@ -255,23 +298,24 @@ void OpenGLWidget::drawCylinder() {
         vertices.append(QVector3D(x, h / 2, z));
     }
 
-    // Upload vertices to VBO
+    // Envoi au VBO
     vbo.bind();
     vbo.allocate(vertices.constData(), vertices.size() * sizeof(QVector3D));
 
-    // Draw bottom and top circles
+    // Dessin des cercles
     glEnableVertexAttribArray(0);
     glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
     glDrawArrays(GL_LINE_LOOP, 0, slices);
     glDrawArrays(GL_LINE_LOOP, slices, slices);
 
-    // Draw vertical lines
+    // Dessin des lignes verticales
     glDrawArrays(GL_LINES, 2 * slices, vertices.size() - 2 * slices);
 
     glDisableVertexAttribArray(0);
 
     vbo.release();
 }
+
 
 void OpenGLWidget::drawSphere(float radius, int lats, int longs) {
     QVector<QVector3D> vertices;

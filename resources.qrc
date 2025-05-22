@@ -12,5 +12,8 @@
         <file>resources/images/handle_texture.png</file>
         <file>resources/images/blade2_texture.jpg</file>
         <file>resources/images/blade3_texture.png</file>
+        <file>resources/images/smoothie_shop.png</file>
+        <file>resources/images/smoothie_shop2.png</file>
+        <file>resources/images/smoothies_background.png</file>
     </qresource>
 </RCC>
