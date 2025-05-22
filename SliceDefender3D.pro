@@ -30,6 +30,7 @@ HEADERS += \
 INCLUDEPATH += C:/opencv/build/install/include
 
 
+
 LIBS += -L"C:/opencv/build/install/x64/mingw/lib" \
     -lopencv_core490 \
     -lopencv_highgui490 \

@@ -182,32 +182,63 @@ void OpenGLWidget::setHandPosition(const QVector3D& position) {
 }
 
 void OpenGLWidget::paintGL() {
-
+    // Clear the screen with black color
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-
     glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    // Configurer matrices projection et vue
+    // Configure the projection matrix for perspective
     projection.setToIdentity();
     projection.perspective(45.0f, float(width()) / height(), 0.1f, 100.0f);
 
+    // Set the camera position and look at the origin (camera slightly up and back)
+    QVector3D cameraPosition(0.0f, 2.0f, 5.0f);  // Camera moved slightly up
     view.setToIdentity();
-    view.lookAt(cameraPosition, QVector3D(0, 0, 0), QVector3D(0, 1, 0));
+    view.lookAt(cameraPosition, QVector3D(0, 0, 0), QVector3D(0, 1, 0));  // Camera looking at origin
 
     shaderProgram->bind();
 
-    // Position et couleur de la lumière (statique, fixe au-dessus)
-    QVector3D lightPos(0.0f, 5.0f, 0.0f);
-    QVector3D lightColor(1.0f, 1.0f, 1.0f);
+    // **1. Render the lamp first, before any other object (fixed background element)**
+    QVector3D lightPos(0.0f, 2.0f, 0.0f);  // Fixed position of the lamp
+    QVector3D lightColor(1.0f, 1.0f, 1.0f); // White light color
 
-    // Zone de spawn (fond cylindrique transparent)
+    // Pass light and camera positions to shaders
+    shaderProgram->setUniformValue("lightPos", lightPos);
+    shaderProgram->setUniformValue("lightColor", lightColor);
+    shaderProgram->setUniformValue("viewPos", cameraPosition);
+
+    shaderProgram->setUniformValue("projectionMatrix", projection);
+    shaderProgram->setUniformValue("viewMatrix", view);
+
+    // **Disable depth writes so that the lamp stays on top of all objects**
+    glDepthMask(GL_FALSE);  // Disable depth writing
+
+    // Draw the lamp as a fixed object
     {
-        QMatrix4x4 model;
-        model.setToIdentity();
-        model.translate(0, -0.5f, 2.5f);
+        QMatrix4x4 lampModel;
+        lampModel.setToIdentity();
+        lampModel.translate(lightPos);  // Set the lamp's fixed position
 
-        shaderProgram->setUniformValue("mvpMatrix", projection * view * model);
-        shaderProgram->setUniformValue("modelMatrix", model);
+        shaderProgram->setUniformValue("mvpMatrix", projection * view * lampModel);
+        shaderProgram->setUniformValue("modelMatrix", lampModel);
+        shaderProgram->setUniformValue("viewMatrix", view);
+        shaderProgram->setUniformValue("projectionMatrix", projection);
+
+        drawLamp();  // This method draws the lamp at the fixed position
+    }
+
+    // **Re-enable depth writes for the rest of the scene**
+    glDepthMask(GL_TRUE);  // Re-enable depth writing for other objects
+
+    // Now, render other dynamic objects (sword, projectiles, etc.)
+
+    // Spawn zone (transparent cylindrical background)
+    {
+        QMatrix4x4 spawnModel;
+        spawnModel.setToIdentity();
+        spawnModel.translate(0, -0.5f, 2.5f);  // Adjust spawn zone position (cylinder)
+
+        shaderProgram->setUniformValue("mvpMatrix", projection * view * spawnModel);
+        shaderProgram->setUniformValue("modelMatrix", spawnModel);
         shaderProgram->setUniformValue("viewMatrix", view);
         shaderProgram->setUniformValue("projectionMatrix", projection);
         shaderProgram->setUniformValue("lightPos", lightPos);
@@ -217,24 +248,25 @@ void OpenGLWidget::paintGL() {
         shaderProgram->setUniformValue("useTexture", false);
         shaderProgram->setUniformValue("color", QVector4D(0.2f, 0.7f, 1.0f, 0.4f));
 
-        glDepthMask(GL_FALSE);
-        drawCylinder();
-        glDepthMask(GL_TRUE);
+        glDepthMask(GL_FALSE);  // Don't affect depth when drawing the spawn zone
+        drawCylinder();  // Draw the transparent spawning cylinder
+        glDepthMask(GL_TRUE);  // Re-enable depth for other objects
     }
 
-    // Dessiner le sabre texturé (avec éclairage)
+    // Draw the sword with texture and lighting
     if (handSet) {
-        QMatrix4x4 model;
-        model.setToIdentity();
+        QMatrix4x4 swordModel;
+        swordModel.setToIdentity();
 
+        // Calculate the rotation based on the hand's position
         float angle = atan2(handZ, handX) * 180.0f / M_PI;
 
-        model.translate(handX, handY - 0.5f, handZ + 2.5f);
-        model.rotate(angle, 0.0f, 1.0f, 0.0f);
-        model.scale(1.2f, 1.2f, 1.2f);
+        swordModel.translate(handX, handY - 0.5f, handZ + 2.5f);
+        swordModel.rotate(angle, 0.0f, 1.0f, 0.0f);
+        swordModel.scale(1.2f, 1.2f, 1.2f);  // Scale the sword
 
-        shaderProgram->setUniformValue("mvpMatrix", projection * view * model);
-        shaderProgram->setUniformValue("modelMatrix", model);
+        shaderProgram->setUniformValue("mvpMatrix", projection * view * swordModel);
+        shaderProgram->setUniformValue("modelMatrix", swordModel);
         shaderProgram->setUniformValue("viewMatrix", view);
         shaderProgram->setUniformValue("projectionMatrix", projection);
         shaderProgram->setUniformValue("lightPos", lightPos);
@@ -244,31 +276,74 @@ void OpenGLWidget::paintGL() {
         shaderProgram->setUniformValue("useTexture", true);
         bladeTexture->bind();
 
-        drawSword();
+        drawSword();  // Drawing the sword with textures
 
         bladeTexture->release();
     }
 
-    // Dessiner tous les projectiles avec éclairage cohérent
-    glDisable(GL_CULL_FACE);  // Eviter disparition de faces en rotation
+    // Draw all projectiles with proper lighting
+    glDisable(GL_CULL_FACE);  // Disable face culling to avoid disappearing faces when rotating
 
     for (int i = 0; i < projectiles.size(); ++i) {
         if (!projectiles[i].isActive()) continue;
-
-        // Les projectiles doivent gérer leurs propres uniforms (matrices + éclairage)
         projectiles[i].render(shaderProgram, projection, view, cameraPosition);
     }
-
-    glEnable(GL_CULL_FACE);
-
-    // Ajouter les projectiles en attente (fragments)
-    if (!pendingProjectiles.isEmpty()) {
-        projectiles.append(pendingProjectiles);
-        pendingProjectiles.clear();
-    }
+    glEnable(GL_CULL_FACE);  // Re-enable culling for other objects
 
     shaderProgram->release();
 }
+
+
+
+
+void OpenGLWidget::drawLamp() {
+    const float lampRadius = 0.1f; // Size of the lamp (sphere)
+    const int lats = 16;           // Latitude divisions for the sphere
+    const int longs = 16;          // Longitude divisions for the sphere
+
+    QVector<QVector3D> vertices;
+
+    // Generate vertices for a sphere (same method used earlier)
+    for (int i = 0; i <= lats; ++i) {
+        float lat0 = M_PI * (-0.5 + float(i - 1) / lats);
+        float z0 = lampRadius * std::sin(lat0);
+        float zr0 = lampRadius * std::cos(lat0);
+
+        float lat1 = M_PI * (-0.5 + float(i) / lats);
+        float z1 = lampRadius * std::sin(lat1);
+        float zr1 = lampRadius * std::cos(lat1);
+
+        for (int j = 0; j <= longs; ++j) {
+            float lng = 2 * M_PI * float(j - 1) / longs;
+            float x = std::cos(lng);
+            float y = std::sin(lng);
+
+            vertices.append(QVector3D(x * zr0, y * zr0, z0)); // Top hemisphere vertices
+            vertices.append(QVector3D(x * zr1, y * zr1, z1)); // Bottom hemisphere vertices
+        }
+    }
+
+    // Upload vertices to the VBO (Vertex Buffer Object)
+    vbo.bind();
+    vbo.allocate(vertices.constData(), vertices.size() * sizeof(QVector3D));
+
+    // Enable vertex attributes
+    glEnableVertexAttribArray(0); // position
+    glVertexAttribPointer(0, 3, GL_FLOAT, GL_FALSE, 0, nullptr);
+
+    // Set color to make the lamp visible (bright yellow)
+    shaderProgram->setUniformValue("color", QVector4D(1.0f, 1.0f, 0.0f, 1.0f));  // Yellow color for the lamp
+
+    // Draw the sphere (lamp)
+    glDrawArrays(GL_TRIANGLE_STRIP, 0, vertices.size());
+
+    // Disable vertex attributes
+    glDisableVertexAttribArray(0);
+
+    vbo.release();
+}
+
+
 
 
 void OpenGLWidget::drawCylinder() {
@@ -795,3 +870,5 @@ void OpenGLWidget::updateCamera() {
     view.setToIdentity();
     view.lookAt(cameraPosition, QVector3D(0, 0, 0), QVector3D(0, 1, 0));
 }
+
+

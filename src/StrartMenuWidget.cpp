@@ -4,6 +4,9 @@
 #include <QVBoxLayout>
 #include <QFont>
 
+#include <QUrl>
+
+
 StartMenuWidget::StartMenuWidget(QWidget* parent) : QWidget(parent) {
     setupUi();
 }

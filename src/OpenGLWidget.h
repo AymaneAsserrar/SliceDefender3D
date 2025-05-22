@@ -5,6 +5,8 @@
 #include <QVector>
 #include <QVector3D>
 #include <QElapsedTimer>
+
+
 #include "Projectile.h"
 
 // Add OpenCV includes
@@ -57,6 +59,8 @@ private:
     float cylinderRadius = 1.5f; // Increased from 1.0f to 1.5f to make cylinder bigger
     float cylinderHeight = 2.0f;
     bool handSet = false;
+    //mediaplayer
+
 
     // Shader program
     QOpenGLShaderProgram *shaderProgram;
@@ -69,7 +73,7 @@ private:
     void updateProjectiles(float deltaTime);
     void checkCollisions();
     void drawSpawningZone(); // Add method to visualize spawn zone
-
+    void drawLamp();
     // Game timer and state
     int timerId;
     QElapsedTimer elapsedTimer;
