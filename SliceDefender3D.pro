@@ -8,7 +8,6 @@ SOURCES += \
     src/WebcamHandler.cpp \
     src/Projectile.cpp \
     src/PalmDetection.cpp \
-    src/CalibrationWindow.cpp \
     src/PalmTracker.cpp
 
 HEADERS += \
@@ -16,7 +15,6 @@ HEADERS += \
     src/OpenGLWidget.h \
     src/WebcamHandler.h \
     src/Projectile.h \
-    src/CalibrationWindow.h \
     src/PalmTracker.h
 
 # OpenCV
@@ -36,4 +34,4 @@ LIBS += -L$$(OPENCV_DIR)/lib \
     -lopencv_flann4110
 
 
-# RESOURCES += resources.qrc # Comment out or remove if resources.qrc is not used or does not exist
+RESOURCES += resources.qrc # Comment out or remove if resources.qrc is not used or does not exist

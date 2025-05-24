@@ -1,0 +1,23 @@
+<RCC>
+    <qresource prefix="/new/prefix2">
+        <file>resources/images/apple_texture.jpg</file>
+        <file>resources/images/banana2_texture.jpg.png</file>
+        <file>resources/images/roof_texture.jpg</file>
+        <file>resources/images/ananas2_texture.jpg</file>
+        <file>resources/images/Fraise_texture.jpg</file>
+        <file>resources/images/blade_texture.jpg</file>
+        <file>resources/images/banana3_texture.jpg</file>
+        <file>resources/images/banana4_texture.jpg</file>
+        <file>resources/images/wood_texture.jpg</file>
+        <file>resources/images/wood_text.jpg</file>
+        <file>resources/images/blade2_texture.jpg</file>
+        <file>resources/images/walls.png</file>
+        <file>resources/images/handle_texture.jpg</file>
+        <file>resources/images/wall_text.jpg</file>
+        <file>resources/images/floor_texture.jpg</file>
+	<file>resources/images/door_texture.jpg</file>
+    </qresource>
+    <qresource prefix="/new/prefix3">
+        <file>resources/hand/palm.xml</file>
+    </qresource>
+</RCC>

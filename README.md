@@ -16,3 +16,7 @@
 
 - Use your hand to interact with projectiles in the 3D scene.
 - Score points by cutting projectiles.
+
+## EXECUTABLE FILE LINK
+
+https://drive.google.com/drive/folders/1oUTkCd5kfS3Uzta5MHHdvc_eziOGC9jt?usp=sharing
