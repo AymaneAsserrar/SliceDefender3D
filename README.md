@@ -68,4 +68,4 @@ The application is composed of the following core classes:
 - **Aymane ASSERRAR**
 - **Marieme BENZHA**
 
-_Academic Project – ENSA Tanger & Télécom Saint-Étienne | 2024–2025_
+_Academic Project – Télécom Saint-Étienne | 2024–2025_
